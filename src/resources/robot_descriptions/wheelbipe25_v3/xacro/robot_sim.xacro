@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="wheelbipe25_v3">
+  <xacro:arg name="prefix" default="" />
+  
+  <xacro:property name="sim_env" value="$(arg sim_env)" />
+  <xacro:property name="ctrl_mode" value="$(arg ctrl_mode)" />
+  <xacro:arg name="yaml_path" default="" />
+
+  <xacro:include filename="$(find robot_descriptions)/wheelbipe25_v3/xacro/materials.xacro" />
+  <xacro:include filename="$(find robot_descriptions)/wheelbipe25_v3/xacro/description.xacro" /> 
+
+  <xacro:include filename="$(find robot_descriptions)/wheelbipe25_v3/xacro/ros2control.xacro" />
+
+  <xacro:if value="${sim_env == 'none'}">
+    <xacro:property name="name" value="HardwareControl" />
+  </xacro:if>
+
+  <xacro:if value="${sim_env == 'gazebo'}">
+    <xacro:property name="name" value="GazeboControl" />
+  </xacro:if>
+
+  <xacro:if value="${sim_env == 'webots'}">
+    <xacro:property name="name" value="WebotsControl" />
+  </xacro:if>
+
+  <xacro:description />
+  <xacro:ros2control name="${name}" ctrl_mode="$(arg ctrl_mode)" sim_env="$(arg sim_env)" yaml_path="$(arg yaml_path)" />
+
+</robot>

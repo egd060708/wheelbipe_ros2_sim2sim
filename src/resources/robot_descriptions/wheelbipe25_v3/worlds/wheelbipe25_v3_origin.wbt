@@ -1,0 +1,896 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+
+WorldInfo {
+}
+Viewpoint {
+  orientation -0.12744624424941084 0.06615727125427553 0.989636635481381 2.2684026032128317
+  position 1.4705519074195983 -1.7790098730573294 0.8936295519759532
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  floorSize 100 100
+}
+Robot {
+  translation 0 0 0.3
+  children [
+    Shape {
+      appearance DEF meshes PBRAppearance {
+        baseColor 0.898039 0.917647 0.929412
+        roughness 1
+        metalness 0
+      }
+      geometry DEF base_link Mesh {
+        url [
+          "../meshes/base_link.STL"
+        ]
+      }
+    }
+    DEF right_rear1_joint HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 -0.1815 0
+      }
+      device [
+        RotationalMotor {
+          name "right_rear1_joint"
+          maxVelocity 10.472
+          minPosition -3.14
+          maxPosition 3.14
+          maxTorque 40
+        }
+        PositionSensor {
+          name "right_rear1_joint_sensor"
+        }
+      ]
+      endPoint DEF right_rear1_link Solid {
+        translation 0 -0.1815 0
+        rotation 0 1 0 0
+        children [
+          Shape {
+            appearance USE meshes
+            geometry DEF right_rear1_link Mesh {
+              url [
+                "../meshes/right_rear1_link.STL"
+              ]
+            }
+          }
+          DEF right_rear2_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor -0.215 -0.018 0
+              minStop -0.05
+              maxStop 1.05
+            }
+            device [
+              RotationalMotor {
+                name "right_rear2_joint"
+                controlPID 0 0 0
+                minPosition -0.05
+                maxPosition 1.05
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "right_rear2_joint_sensor"
+              }
+            ]
+            endPoint DEF right_rear2_link Solid {
+              translation -0.215 -0.018 0
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF right_rear2_link Mesh {
+                    url [
+                      "../meshes/right_rear2_link.STL"
+                    ]
+                  }
+                }
+                DEF right_wheel_joint HingeJoint {
+                  jointParameters HingeJointParameters {
+                    axis 0 1 0
+                    anchor 0.20521 0 -0.14968
+                  }
+                  device [
+                    RotationalMotor {
+                      name "right_wheel_joint"
+                      maxVelocity 52.229
+                      maxTorque 5
+                    }
+                    PositionSensor {
+                      name "right_wheel_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF right_wheel_link Solid {
+                    translation 0.20521 0 -0.14968
+                    rotation 0 1 0 0
+                    children [
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF right_wheel_link Mesh {
+                          url [
+                            "../meshes/right_wheel_link.STL"
+                          ]
+                        }
+                      }
+                    ]
+                    name "right_wheel_link"
+                    boundingObject USE right_wheel_link
+                    physics Physics {
+                      density -1
+                      mass 0.309755
+                      centerOfMass [
+                        0.000104 -0.012847 -1.1e-05
+                      ]
+                      inertiaMatrix [
+                        0.0003104314 0.0005717239 0.0003097088
+                        -2.369338e-07 -1.477475e-07 4.759622e-08
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "right_rear2_link"
+              boundingObject USE right_rear2_link
+              physics Physics {
+                density -1
+                mass 0.381557
+                centerOfMass [
+                  0.064227 0.005187 -0.052152
+                ]
+                inertiaMatrix [
+                  0.0007445162 0.002039196 0.001310607
+                  2.042353e-06 0.0008739154 -2.270599e-06
+                ]
+              }
+            }
+          }
+          DEF right_spring1_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor -0.016246 0.0015 -0.044635
+            }
+            device [
+              RotationalMotor {
+                name "right_spring1_joint"
+                controlPID 0 0 0
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "right_spring1_joint_sensor"
+              }
+            ]
+            endPoint DEF right_spring1_link Solid {
+              translation -0.016246 0.0015 -0.044635
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF right_spring1_link Mesh {
+                    url [
+                      "../meshes/right_spring1_link.STL"
+                    ]
+                  }
+                }
+                DEF right_spring2_joint SliderJoint {
+                  jointParameters JointParameters {
+                    axis -1 0 0
+                  }
+                  device [
+                    LinearMotor {
+                      name "right_spring2_joint"
+                      maxVelocity 100
+                      minPosition -0.01
+                      maxPosition 0.05
+                      maxForce 500
+                    }
+                    PositionSensor {
+                      name "right_spring2_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF right_spring2_link Solid {
+                    translation -0.16288 0 0.009805
+                    children [
+                      DEF right_s2r2 HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                        }
+                        endPoint SolidReference {
+                          solidName "right_rear2_link"
+                        }
+                      }
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF right_spring2_link Mesh {
+                          url [
+                            "../meshes/right_spring2_link.STL"
+                          ]
+                        }
+                      }
+                    ]
+                    name "right_spring2_link"
+                    boundingObject USE right_spring2_link
+                    physics Physics {
+                      density -1
+                      mass 0.169064
+                      centerOfMass [
+                        0.067663 0.0025 -0.004073
+                      ]
+                      inertiaMatrix [
+                        5.995071e-06 0.0002580469 0.0002569712
+                        -1.228087e-19 1.516386e-05 7.632055e-21
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "right_spring1_link"
+              boundingObject USE right_spring1_link
+              physics Physics {
+                density -1
+                mass 0.026477
+                centerOfMass [
+                  -0.029465 0.0025 0.001774
+                ]
+                inertiaMatrix [
+                  3.730429e-07 1.983015e-05 1.957195e-05
+                  -7.781848e-21 1.159988e-06 2.835391e-22
+                ]
+              }
+            }
+          }
+        ]
+        name "right_rear1_link"
+        boundingObject USE right_rear1_link
+        physics Physics {
+          density -1
+          mass 0.440862
+          centerOfMass [
+            -0.106332 0.004491 0.000587
+          ]
+          inertiaMatrix [
+            0.000136067 0.001579044 0.00146971
+            -1.82842e-06 3.985031e-05 6.783866e-07
+          ]
+        }
+      }
+    }
+    DEF right_front1_joint HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 -0.1815 0
+      }
+      device [
+        RotationalMotor {
+          name "right_front1_joint"
+          maxVelocity 10.472
+          minPosition -3.14
+          maxPosition 3.14
+          maxTorque 40
+        }
+        PositionSensor {
+          name "right_front1_joint_sensor"
+        }
+      ]
+      endPoint DEF right_front1_link Solid {
+        translation 0 -0.1815 0
+        rotation 0 1 0 0
+        children [
+          Shape {
+            appearance USE meshes
+            geometry DEF right_front1_link Mesh {
+              url [
+                "../meshes/right_front1_link.STL"
+              ]
+            }
+          }
+          DEF right_front2_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor 0.099148 -0.001 -0.013023
+            }
+            device [
+              RotationalMotor {
+                name "right_front2_joint"
+                controlPID 0 0 0
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "right_front2_joint_sensor"
+              }
+            ]
+            endPoint DEF right_front2_link Solid {
+              translation 0.099148 -0.001 -0.013023
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF right_front2_link Mesh {
+                    url [
+                      "../meshes/right_front2_link.STL"
+                    ]
+                  }
+                }
+                DEF right_front3_joint HingeJoint {
+                  jointParameters HingeJointParameters {
+                    axis 0 1 0
+                    anchor -0.1037 -0.0035 -0.056595
+                  }
+                  device [
+                    RotationalMotor {
+                      name "right_front3_joint"
+                      controlPID 0 0 0
+                      maxTorque 10000
+                    }
+                    PositionSensor {
+                      name "right_front3_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF right_front3_link Solid {
+                    translation -0.1037 -0.0035 -0.056595
+                    rotation 0 1 0 0
+                    children [
+                      DEF right_f3r1 HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                          anchor -0.09545 0 0.06962
+                        }
+                        endPoint SolidReference {
+                          solidName "right_rear1_link"
+                        }
+                      }
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF right_front3_link Mesh {
+                          url [
+                            "../meshes/right_front3_link.STL"
+                          ]
+                        }
+                      }
+                      DEF right_front4_joint HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                          anchor -0.12891 0.0025 0.11942
+                        }
+                        device [
+                          RotationalMotor {
+                            name "right_front4_joint"
+                            controlPID 0 0 0
+                            maxTorque 10000
+                          }
+                          PositionSensor {
+                            name "right_front4_joint_sensor"
+                          }
+                        ]
+                        endPoint DEF right_front4_link Solid {
+                          translation -0.12891 0.0025 0.11942
+                          rotation 0 1 0 0
+                          children [
+                            DEF right_f4r2 HingeJoint {
+                              jointParameters HingeJointParameters {
+                                axis 0 1 0
+                                anchor -0.115 0 0
+                              }
+                              endPoint SolidReference {
+                                solidName "right_rear2_link"
+                              }
+                            }
+                            Shape {
+                              appearance USE meshes
+                              geometry DEF right_front4_link Mesh {
+                                url [
+                                  "../meshes/right_front4_link.STL"
+                                ]
+                              }
+                            }
+                          ]
+                          name "right_front4_link"
+                          boundingObject USE right_front4_link
+                          physics Physics {
+                            density -1
+                            mass 0.092614
+                            centerOfMass [
+                              -0.094699 0.00064 0
+                            ]
+                            inertiaMatrix [
+                              4.141519e-06 5.674376e-05 5.514041e-05
+                              -1.664263e-14 -1.017357e-14 2.694475e-14
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                    name "right_front3_link"
+                    boundingObject USE right_front3_link
+                    physics Physics {
+                      density -1
+                      mass 0.071354
+                      centerOfMass [
+                        -0.10576 0.001835 0.094044
+                      ]
+                      inertiaMatrix [
+                        3.979717e-05 8.739998e-05 5.034997e-05
+                        9.400968e-15 3.964716e-05 -1.071608e-13
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "right_front2_link"
+              boundingObject USE right_front2_link
+              physics Physics {
+                density -1
+                mass 0.077576
+                centerOfMass [
+                  -0.081342 0.003474 -0.044393
+                ]
+                inertiaMatrix [
+                  1.600795e-05 5.843083e-05 4.554732e-05
+                  9.400955e-15 -2.295982e-05 -1.071608e-13
+                ]
+              }
+            }
+          }
+        ]
+        name "right_front1_link"
+        boundingObject USE right_front1_link
+        physics Physics {
+          density -1
+          mass 0.158567
+          centerOfMass [
+            0.041221 0.005264 -0.005415
+          ]
+          inertiaMatrix [
+            3.596621e-05 0.000145593 0.0001220448
+            7.358818e-06 1.150511e-05 -9.665966e-07
+          ]
+        }
+      }
+    }
+    DEF left_rear1_joint HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 0.1815 0
+      }
+      device [
+        RotationalMotor {
+          name "left_rear1_joint"
+          maxVelocity 10.472
+          minPosition -3.14
+          maxPosition 3.14
+          maxTorque 40
+        }
+        PositionSensor {
+          name "left_rear1_joint_sensor"
+        }
+      ]
+      endPoint DEF left_rear1_link Solid {
+        translation 0 0.1815 0
+        rotation 0 1 0 0
+        children [
+          Shape {
+            appearance USE meshes
+            geometry DEF left_rear1_link Mesh {
+              url [
+                "../meshes/left_rear1_link.STL"
+              ]
+            }
+          }
+          DEF left_rear2_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor -0.21499 0.018 0.002019
+              minStop -0.05
+              maxStop 1.05
+            }
+            device [
+              RotationalMotor {
+                name "left_rear2_joint"
+                controlPID 0 0 0
+                minPosition -0.05
+                maxPosition 1.05
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "left_rear2_joint_sensor"
+              }
+            ]
+            endPoint DEF left_rear2_link Solid {
+              translation -0.21499 0.018 0.002019
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF left_rear2_link Mesh {
+                    url [
+                      "../meshes/left_rear2_link.STL"
+                    ]
+                  }
+                }
+                DEF left_wheel_joint HingeJoint {
+                  jointParameters HingeJointParameters {
+                    axis 0 1 0
+                    anchor 0.2038 0 -0.1516
+                  }
+                  device [
+                    RotationalMotor {
+                      name "left_wheel_joint"
+                      maxVelocity 52.229
+                      maxTorque 5
+                    }
+                    PositionSensor {
+                      name "left_wheel_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF left_wheel_link Solid {
+                    translation 0.2038 0 -0.1516
+                    rotation 0 1 0 0
+                    children [
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF left_wheel_link Mesh {
+                          url [
+                            "../meshes/left_wheel_link.STL"
+                          ]
+                        }
+                      }
+                    ]
+                    name "left_wheel_link"
+                    boundingObject USE left_wheel_link
+                    physics Physics {
+                      density -1
+                      mass 0.304045
+                      centerOfMass [
+                        4.2e-05 0.013501 -9.8e-05
+                      ]
+                      inertiaMatrix [
+                        0.0003087478 0.0005695846 0.000309176
+                        1.157101e-07 -3.264074e-07 -2.121655e-07
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "left_rear2_link"
+              boundingObject USE left_rear2_link
+              physics Physics {
+                density -1
+                mass 0.321595
+                centerOfMass [
+                  0.075296 -0.005086 -0.062502
+                ]
+                inertiaMatrix [
+                  0.0007593648 0.00201711 0.001273173
+                  -2.058355e-06 0.0008810833 2.216263e-06
+                ]
+              }
+            }
+          }
+          DEF left_spring1_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor -0.016664 -0.0015 -0.044481
+            }
+            device [
+              RotationalMotor {
+                name "left_spring1_joint"
+                controlPID 0 0 0
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "left_spring1_joint_sensor"
+              }
+            ]
+            endPoint DEF left_spring1_link Solid {
+              translation -0.016664 -0.0015 -0.044481
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF left_spring1_link Mesh {
+                    url [
+                      "../meshes/left_spring1_link.STL"
+                    ]
+                  }
+                }
+                DEF left_spring2_joint SliderJoint {
+                  jointParameters JointParameters {
+                    axis -0.997585 0 0.069462
+                  }
+                  device [
+                    LinearMotor {
+                      name "left_spring2_joint"
+                      maxVelocity 100
+                      minPosition -0.01
+                      maxPosition 0.05
+                      maxForce 500
+                    }
+                    PositionSensor {
+                      name "left_spring2_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF left_spring2_link Solid {
+                    translation -0.16278 0 0.011334
+                    rotation 0 1 0 0.069518
+                    children [
+                      DEF left_s2r2 HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                        }
+                        endPoint SolidReference {
+                          solidName "left_rear2_link"
+                        }
+                      }
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF left_spring2_link Mesh {
+                          url [
+                            "../meshes/left_spring2_link.STL"
+                          ]
+                        }
+                      }
+                    ]
+                    name "left_spring2_link"
+                    boundingObject USE left_spring2_link
+                    physics Physics {
+                      density -1
+                      mass 0.169064
+                      centerOfMass [
+                        0.067786 -0.0025 0
+                      ]
+                      inertiaMatrix [
+                        5.082199e-06 0.0002580469 0.0002578841
+                        1.106095e-20 1.932294e-21 -2.00344e-21
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "left_spring1_link"
+              boundingObject USE left_spring1_link
+              physics Physics {
+                density -1
+                mass 0.026477
+                centerOfMass [
+                  -0.029447 -0.0025 0.00205
+                ]
+                inertiaMatrix [
+                  3.965179e-07 1.983015e-05 1.954847e-05
+                  -4.458722e-20 1.340043e-06 2.931523e-21
+                ]
+              }
+            }
+          }
+        ]
+        name "left_rear1_link"
+        boundingObject USE left_rear1_link
+        physics Physics {
+          density -1
+          mass 0.503388
+          centerOfMass [
+            -0.118949 -0.002609 0.001637
+          ]
+          inertiaMatrix [
+            0.0001471624 0.001609354 0.001489392
+            1.831268e-06 5.290913e-05 -7.0073e-07
+          ]
+        }
+      }
+    }
+    DEF left_front1_joint HingeJoint {
+      jointParameters HingeJointParameters {
+        axis 0 1 0
+        anchor 0 0.1815 0
+      }
+      device [
+        RotationalMotor {
+          name "left_front1_joint"
+          maxVelocity 10.472
+          minPosition -3.14
+          maxPosition 3.14
+          maxTorque 40
+        }
+        PositionSensor {
+          name "left_front1_joint_sensor"
+        }
+      ]
+      endPoint DEF left_front1_link Solid {
+        translation 0 0.1815 0
+        rotation 0 1 0 0
+        children [
+          Shape {
+            appearance USE meshes
+            geometry DEF left_front1_link Mesh {
+              url [
+                "../meshes/left_front1_link.STL"
+              ]
+            }
+          }
+          DEF left_front2_joint HingeJoint {
+            jointParameters HingeJointParameters {
+              axis 0 1 0
+              anchor 0.099022 0.001 -0.013954
+            }
+            device [
+              RotationalMotor {
+                name "left_front2_joint"
+                controlPID 0 0 0
+                maxTorque 10000
+              }
+              PositionSensor {
+                name "left_front2_joint_sensor"
+              }
+            ]
+            endPoint DEF left_front2_link Solid {
+              translation 0.099022 0.001 -0.013954
+              rotation 0 1 0 0
+              children [
+                Shape {
+                  appearance USE meshes
+                  geometry DEF left_front2_link Mesh {
+                    url [
+                      "../meshes/left_front2_link.STL"
+                    ]
+                  }
+                }
+                DEF left_front3_joint HingeJoint {
+                  jointParameters HingeJointParameters {
+                    axis 0 1 0
+                    anchor -0.10423 0.0035 -0.055619
+                  }
+                  device [
+                    RotationalMotor {
+                      name "left_front3_joint"
+                      controlPID 0 0 0
+                      maxTorque 10000
+                    }
+                    PositionSensor {
+                      name "left_front3_joint_sensor"
+                    }
+                  ]
+                  endPoint DEF left_front3_link Solid {
+                    translation -0.10423 0.0035 -0.055619
+                    rotation 0 1 0 0
+                    children [
+                      DEF left_f3r1 HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                          anchor -0.09545 0 0.06962
+                        }
+                        endPoint SolidReference {
+                          solidName "left_rear1_link"
+                        }
+                      }
+                      Shape {
+                        appearance USE meshes
+                        geometry DEF left_front3_link Mesh {
+                          url [
+                            "../meshes/left_front3_link.STL"
+                          ]
+                        }
+                      }
+                      DEF left_front4_joint HingeJoint {
+                        jointParameters HingeJointParameters {
+                          axis 0 1 0
+                          anchor -0.12778 -0.0025 0.12063
+                        }
+                        device [
+                          RotationalMotor {
+                            name "left_front4_joint"
+                            controlPID 0 0 0
+                            maxTorque 10000
+                          }
+                          PositionSensor {
+                            name "left_front4_joint_sensor"
+                          }
+                        ]
+                        endPoint DEF left_front4_link Solid {
+                          translation -0.12778 -0.0025 0.12063
+                          rotation 0 1 0 0
+                          children [
+                            DEF left_f4r2 HingeJoint {
+                              jointParameters HingeJointParameters {
+                                axis 0 1 0
+                                anchor -0.115 0 0
+                              }
+                              endPoint SolidReference {
+                                solidName "left_rear2_link"
+                              }
+                            }
+                            Shape {
+                              appearance DEF left_front4_link_material PBRAppearance {
+                                roughness 1
+                                metalness 0
+                              }
+                              geometry DEF left_front4_link Mesh {
+                                url [
+                                  "../meshes/left_front4_link.STL"
+                                ]
+                              }
+                            }
+                          ]
+                          name "left_front4_link"
+                          boundingObject USE left_front4_link
+                          physics Physics {
+                            density -1
+                            mass 0.093045
+                            centerOfMass [
+                              -0.094789 0.000205 0.00089
+                            ]
+                            inertiaMatrix [
+                              5.841942e-06 5.653626e-05 5.683184e-05
+                              9.108099e-15 4.788314e-07 1.071861e-13
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                    name "left_front3_link"
+                    boundingObject USE left_front3_link
+                    physics Physics {
+                      density -1
+                      mass 0.071354
+                      centerOfMass [
+                        -0.104872 -0.001835 0.095033
+                      ]
+                      inertiaMatrix [
+                        4.054259e-05 8.739998e-05 4.960454e-05
+                        1.045665e-14 3.973925e-05 1.07063e-13
+                      ]
+                    }
+                  }
+                }
+              ]
+              name "left_front2_link"
+              boundingObject USE left_front2_link
+              physics Physics {
+                density -1
+                mass 0.077576
+                centerOfMass [
+                  -0.081755 -0.003474 -0.043627
+                ]
+                inertiaMatrix [
+                  1.557941e-05 5.843083e-05 4.597586e-05
+                  4.727125e-14 -2.267842e-05 9.662946e-14
+                ]
+              }
+            }
+          }
+        ]
+        name "left_front1_link"
+        boundingObject USE left_front1_link
+        physics Physics {
+          density -1
+          mass 0.158567
+          centerOfMass [
+            0.041169 -0.005264 -0.005801
+          ]
+          inertiaMatrix [
+            3.618985e-05 0.000145593 0.0001218212
+            -7.349418e-06 1.231128e-05 1.035649e-06
+          ]
+        }
+      }
+    }
+  ]
+  name "Wheelbipe25V3"
+  boundingObject USE base_link
+  physics Physics {
+    density -1
+    mass 13.642818
+    centerOfMass [
+      0.003404 0.005444 0.026919
+    ]
+    inertiaMatrix [
+      0.0174056 0.023837 0.02742499
+      -3.218428e-05 9.977457e-05 -3.649924e-05
+    ]
+  }
+  controller "test_robot_controller"
+}

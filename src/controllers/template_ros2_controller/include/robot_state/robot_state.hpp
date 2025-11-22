@@ -1,0 +1,76 @@
+// Copyright (c) 2023 Direct Drive Technology Co., Ltd. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef TEMPLATE_ROS2_CONTROLLER__ROBOT_STATE_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__ROBOT_STATE_HPP_
+
+#include <vector>
+#include <string>
+#include <array>
+
+namespace robot_locomotion
+{
+
+// 关节状态结构
+struct JointState
+{
+  std::string name;           // 关节名称
+  double position = 0.0;      // 关节位置 (rad)
+  double velocity = 0.0;      // 关节速度 (rad/s)
+  double effort = 0.0;        // 关节力矩 (N·m)
+  double output_torque = 0.0; // 输出力矩 (N·m)
+};
+
+// IMU传感器状态结构
+struct IMUState
+{
+  std::array<double, 3> linear_acceleration = {0.0, 0.0, 0.0};  // 线性加速度 (m/s²)
+  std::array<double, 3> angular_velocity = {0.0, 0.0, 0.0};     // 角速度 (rad/s)
+  std::array<double, 4> orientation = {0.0, 0.0, 0.0, 1.0};     // 四元数 (x, y, z, w)
+};
+
+// 机器人状态数据结构（暴露给状态机）
+struct RobotState
+{
+  // 关节状态
+  std::vector<JointState> joints;
+
+  // 传感器状态
+  IMUState imu;
+
+  // 时间信息
+  double timestamp = 0.0;        // 时间戳 (s)
+  double period = 0.0;            // 控制周期 (s)
+
+  // 辅助函数：根据关节名称查找关节状态
+  JointState* findJoint(const std::string& joint_name);
+  const JointState* findJoint(const std::string& joint_name) const;
+
+  // 辅助函数：获取所有关节的输出力矩
+  std::vector<double> getOutputTorques() const;
+
+  // 辅助函数：获取所有关节的位置
+  std::vector<double> getPositions() const;
+
+  // 辅助函数：获取所有关节的速度
+  std::vector<double> getVelocities() const;
+
+  // 辅助函数：获取所有关节的力矩
+  std::vector<double> getEfforts() const;
+};
+
+}  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__ROBOT_STATE_HPP_
+

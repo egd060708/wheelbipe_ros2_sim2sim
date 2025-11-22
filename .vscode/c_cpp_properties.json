@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/opt/ros/humble/include/**",
+        "/home/lu/Git_Project/github/ros2_learning/dev_ws/install/learning_interface/include/**",
+        "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/include/**",
+        "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/interfaces/webots_bridge/include/**",
+        "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/middlewares/template_middleware/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

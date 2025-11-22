@@ -1,0 +1,22 @@
+template_ros2_controller:
+  update_rate:
+    {
+      type: int,
+      default_value: 500,
+      description: "Main control loop update rate in Hz",
+    }
+  joints:
+    {
+      type: string_array,
+      default_value: [],
+      description: "Joint names to control and listen to",
+      read_only: true,
+      validation: { unique<>: null },
+    }
+  # sync_time_with_webots:
+  #   {
+  #     type: bool,
+  #     default_value: true,
+  #     description: "Enable time synchronization with Webots simulation time. When enabled, controller will use simulation time from Webots for timestamp alignment.",
+  #   }
+  
