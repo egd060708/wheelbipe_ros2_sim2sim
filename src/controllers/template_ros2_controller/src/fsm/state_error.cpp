@@ -20,12 +20,13 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processErrorState(const RobotState& robot_state, const rclcpp::Time& time)
+void StateMachine::processErrorState(RobotState& robot_state, const rclcpp::Time& time)
 {
-  (void)robot_state;
   (void)time;
   // 错误状态：所有力矩设为0，确保安全
-  std::fill(output_torques_.begin(), output_torques_.end(), 0.0);
+  for (auto& joint : robot_state.joints) {
+    joint.output_torque = 0.0;
+  }
   static rclcpp::Clock clock(RCL_ROS_TIME);
   RCLCPP_ERROR_THROTTLE(logger_, clock, 1000,
     "Controller in ERROR state");

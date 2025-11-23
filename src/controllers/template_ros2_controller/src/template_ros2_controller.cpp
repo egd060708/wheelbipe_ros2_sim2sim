@@ -51,6 +51,22 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   // 初始化状态机
   state_machine_ = std::make_unique<StateMachine>(get_node()->get_logger());
   
+  // 初始化 RL 推理器（如果模型路径已配置）
+  if (!params_.rl_model_path.empty()) {
+    if (state_machine_->initializeRLInference(
+        params_.rl_model_path, params_.rl_inference_frequency)) {
+      RCLCPP_INFO(get_node()->get_logger(), 
+        "RL inference initialized in on_init with model: %s, frequency: %ld Hz",
+        params_.rl_model_path.c_str(), static_cast<long>(params_.rl_inference_frequency));
+    } else {
+      RCLCPP_ERROR(get_node()->get_logger(), 
+        "Failed to initialize RL inference in on_init");
+    }
+  } else {
+    RCLCPP_INFO(get_node()->get_logger(), 
+      "RL model path not configured, RL inference will not be available");
+  }
+  
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -110,6 +126,11 @@ controller_interface::InterfaceConfiguration TemplateRos2Controller::state_inter
 controller_interface::return_type TemplateRos2Controller::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
+  // 更新参数（如果发生变化）
+  if (param_listener_->is_old(params_)) {
+    params_ = param_listener_->get_params();
+  }
+
   // 1. 更新机器人状态数据结构
   updateRobotState(time, period);
 
@@ -117,14 +138,13 @@ controller_interface::return_type TemplateRos2Controller::update(
   if (state_machine_) {
     state_machine_->update(robot_state_, time, period);
     
-    // 3. 从状态机获取输出力矩并应用到关节
-    const std::vector<double>& output_torques = state_machine_->getOutputTorques();
-    for (size_t i = 0; i < joints_.size() && i < output_torques.size(); ++i) {
-      joints_[i]->effort_command_handle->get().set_value(output_torques[i]);
+    // 3. 从 RobotState 获取输出力矩并应用到关节
+    for (size_t i = 0; i < joints_.size() && i < robot_state_.joints.size(); ++i) {
+      joints_[i]->effort_command_handle->get().set_value(robot_state_.joints[i].output_torque);
     }
     
-    // 如果状态机输出的力矩数量不匹配，使用默认逻辑
-    if (output_torques.size() != joints_.size()) {
+    // 如果关节数量不匹配，使用默认逻辑
+    if (robot_state_.joints.size() != joints_.size()) {
       // 默认逻辑：保持原有行为（用于兼容）
       for (std::shared_ptr<Joint> joint : joints_) {
         if (joint->name == "left_spring2_joint" || joint->name == "right_spring2_joint") {

@@ -42,11 +42,13 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/fsm/state_machine.cpp
   src/fsm/state_init.cpp
   src/fsm/state_idle.cpp
+  src/fsm/state_rl.cpp
   src/fsm/state_standing.cpp
   src/fsm/state_walking.cpp
   src/fsm/state_running.cpp
   src/fsm/state_error.cpp
   src/fsm/state_emergency_stop.cpp
+  src/tensorrt_cuda/tensorrt_inference.cpp
   src/robot_state/robot_state.cpp
 )
 
@@ -60,13 +62,59 @@ target_link_options(template_ros2_controller PRIVATE
   # Remove miniconda from library search path
   -Wl,--rpath-link=/usr/lib/x86_64-linux-gnu
 )
+# Find TensorRT and CUDA
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+  PATHS
+    /usr/include/x86_64-linux-gnu
+    /usr/local/cuda/include
+    /usr/include
+    ${CUDA_TOOLKIT_ROOT_DIR}/include
+    /opt/tensorrt/include
+)
+
+find_library(TENSORRT_LIBRARY NAMES nvinfer
+  PATHS
+    /usr/lib/x86_64-linux-gnu
+    /usr/local/cuda/lib64
+    /usr/lib
+    ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+)
+
+
+find_package(CUDA QUIET)
+if(CUDA_FOUND)
+  find_library(CUDA_RUNTIME_LIBRARY cudart
+    PATHS
+      ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+      /usr/local/cuda/lib64
+      /usr/lib/x86_64-linux-gnu
+  )
+endif()
+
 # Directly link to system libfmt.so.8 to avoid runtime dependency on miniconda's libfmt.so.9
 # Link system fmt library first, then template_ros2_controller_parameters
-# Use -Bstatic to force static linking of fmt, then -Bdynamic for others
-target_link_libraries(template_ros2_controller 
+# Collect all libraries to link in one call to avoid signature mismatch
+# Note: Using plain signature to match ament_auto_add_library's internal usage
+set(TEMPLATE_ROS2_CONTROLLER_LIBS
   /usr/lib/x86_64-linux-gnu/libfmt.so.8
   template_ros2_controller_parameters
 )
+
+# Link TensorRT and CUDA libraries if found
+if(TENSORRT_INCLUDE_DIR AND TENSORRT_LIBRARY)
+  target_include_directories(template_ros2_controller PRIVATE ${TENSORRT_INCLUDE_DIR})
+  list(APPEND TEMPLATE_ROS2_CONTROLLER_LIBS ${TENSORRT_LIBRARY})
+  if(CUDA_RUNTIME_LIBRARY)
+    list(APPEND TEMPLATE_ROS2_CONTROLLER_LIBS ${CUDA_RUNTIME_LIBRARY})
+  endif()
+  target_compile_definitions(template_ros2_controller PRIVATE TENSORRT_AVAILABLE)
+  message(STATUS "TensorRT found: ${TENSORRT_LIBRARY}")
+else()
+  message(WARNING "TensorRT not found. RL inference will not be available.")
+endif()
+
+# Link all libraries at once using plain signature to match ament_auto_add_library
+target_link_libraries(template_ros2_controller ${TEMPLATE_ROS2_CONTROLLER_LIBS})
 
 # Use patchelf to fix library dependency from libfmt.so.9 to libfmt.so.8
 # This is needed because template_ros2_controller_parameters may link to miniconda's libfmt.so.9

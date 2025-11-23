@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "fsm/state_machine.hpp"
+#include "tensorrt_cuda/tensorrt_inference.hpp"
 #include "robot_state/robot_state.hpp"
 
 namespace robot_locomotion
@@ -27,14 +28,13 @@ StateMachine::StateMachine(rclcpp::Logger logger)
   state_entry_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
 }
 
-void StateMachine::update(const RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
+void StateMachine::update(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
   (void)period;
   
   // 更新关节数量（仅在第一次）
   if (num_joints_ == 0 && !robot_state.joints.empty()) {
     num_joints_ = robot_state.joints.size();
-    output_torques_.resize(num_joints_, 0.0);
   }
 
   // 处理状态转换
@@ -47,6 +47,9 @@ void StateMachine::update(const RobotState& robot_state, const rclcpp::Time& tim
       break;
     case ControllerState::IDLE:
       processIdleState(robot_state, time);
+      break;
+    case ControllerState::RL:
+      processRLState(robot_state, time);
       break;
     case ControllerState::STANDING:
       processStandingState(robot_state, time);
@@ -64,9 +67,6 @@ void StateMachine::update(const RobotState& robot_state, const rclcpp::Time& tim
       processEmergencyStopState(robot_state, time);
       break;
   }
-
-  // 计算输出力矩
-  computeOutputTorques(robot_state);
 }
 
 void StateMachine::handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time)
@@ -84,8 +84,21 @@ void StateMachine::handleStateTransition(const RobotState& robot_state, const rc
       break;
 
     case ControllerState::IDLE:
-      // 可以根据条件转换到其他状态
-      if (target_state_ != ControllerState::IDLE && target_state_ != ControllerState::INIT) {
+      // 空闲状态后自动进入强化学习状态
+      if ((time - state_entry_time_).seconds() > 1.0) {
+        next_state = ControllerState::RL;
+      }
+      // 如果设置了目标状态，也可以转换到目标状态
+      else if (target_state_ != ControllerState::IDLE && target_state_ != ControllerState::INIT) {
+        next_state = target_state_;
+      }
+      break;
+
+    case ControllerState::RL:
+      // RL 状态：如果设置了目标状态（且不是 IDLE），可以转换
+      // 避免因为 target_state_ 是 IDLE 而循环切换
+      if (target_state_ != ControllerState::RL && 
+          target_state_ != ControllerState::INIT) {
         next_state = target_state_;
       }
       break;
@@ -116,6 +129,7 @@ void StateMachine::handleStateTransition(const RobotState& robot_state, const rc
       switch (next_state) {
         case ControllerState::INIT: return "INIT";
         case ControllerState::IDLE: return "IDLE";
+        case ControllerState::RL: return "RL";
         case ControllerState::STANDING: return "STANDING";
         case ControllerState::WALKING: return "WALKING";
         case ControllerState::RUNNING: return "RUNNING";
@@ -126,16 +140,34 @@ void StateMachine::handleStateTransition(const RobotState& robot_state, const rc
     }();
     RCLCPP_INFO(logger_, "State transition: %s -> %s",
       getStateName().c_str(), next_state_name);
+    
+    // 离开 RL 状态时停止推理器
+    if (current_state_ == ControllerState::RL) {
+      stopRLInference();
+    }
+    
+    // 进入 RL 状态时启动推理器并更新目标状态
+    if (next_state == ControllerState::RL) {
+      if (isRLInferenceInitialized()) {
+        startRLInference();
+      }
+      // 更新目标状态为 RL，避免循环切换
+      target_state_ = ControllerState::RL;
+    }
+    
     current_state_ = next_state;
     state_entry_time_ = time;
   }
 }
 
-void StateMachine::computeOutputTorques(const RobotState& robot_state)
+const std::vector<double> StateMachine::getOutputTorques(const RobotState& robot_state) const
 {
-  // 将计算好的力矩复制到robot_state中（如果需要）
-  // 这里output_torques_已经在各个状态处理函数中计算好了
-  (void)robot_state;
+  std::vector<double> torques;
+  torques.reserve(robot_state.joints.size());
+  for (const auto& joint : robot_state.joints) {
+    torques.push_back(joint.output_torque);
+  }
+  return torques;
 }
 
 std::string StateMachine::getStateName() const
@@ -143,6 +175,7 @@ std::string StateMachine::getStateName() const
   switch (current_state_) {
     case ControllerState::INIT: return "INIT";
     case ControllerState::IDLE: return "IDLE";
+    case ControllerState::RL: return "RL";
     case ControllerState::STANDING: return "STANDING";
     case ControllerState::WALKING: return "WALKING";
     case ControllerState::RUNNING: return "RUNNING";
@@ -161,10 +194,57 @@ void StateMachine::setTargetState(ControllerState target_state)
 
 void StateMachine::reset()
 {
+  stopRLInference();
   current_state_ = ControllerState::INIT;
   target_state_ = ControllerState::IDLE;
   state_entry_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
-  std::fill(output_torques_.begin(), output_torques_.end(), 0.0);
+}
+
+bool StateMachine::initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz)
+{
+  if (rl_inference_) {
+    RCLCPP_WARN(logger_, "RL inference already initialized");
+    return true;
+  }
+
+  rl_inference_ = std::make_unique<TensorRTInference>(logger_);
+  if (!rl_inference_->initialize(engine_model_path, inference_frequency_hz)) {
+    RCLCPP_ERROR(logger_, "Failed to initialize RL inference");
+    rl_inference_.reset();
+    return false;
+  }
+
+  RCLCPP_INFO(logger_, "RL inference initialized (not started yet)");
+  return true;
+}
+
+void StateMachine::startRLInference()
+{
+  if (!rl_inference_) {
+    RCLCPP_WARN(logger_, "RL inference not initialized, cannot start");
+    return;
+  }
+
+  if (rl_inference_->isRunning()) {
+    RCLCPP_WARN(logger_, "RL inference already running");
+    return;
+  }
+
+  rl_inference_->start();
+  RCLCPP_INFO(logger_, "RL inference started");
+}
+
+void StateMachine::stopRLInference()
+{
+  if (rl_inference_ && rl_inference_->isRunning()) {
+    rl_inference_->stop();
+    RCLCPP_INFO(logger_, "RL inference stopped (but not destroyed)");
+  }
+}
+
+bool StateMachine::isRLInferenceInitialized() const
+{
+  return rl_inference_ != nullptr && rl_inference_->isInitialized();
 }
 
 }  // namespace robot_locomotion

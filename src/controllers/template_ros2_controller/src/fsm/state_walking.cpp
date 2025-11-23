@@ -18,13 +18,13 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processWalkingState(const RobotState& robot_state, const rclcpp::Time& time)
+void StateMachine::processWalkingState(RobotState& robot_state, const rclcpp::Time& time)
 {
   (void)time;
   // 行走状态：实现行走控制逻辑
   // 这里先设置为0，后续可以根据需要添加行走算法
-  for (size_t i = 0; i < output_torques_.size() && i < robot_state.joints.size(); ++i) {
-    output_torques_[i] = 0.0;
+  for (auto& joint : robot_state.joints) {
+    joint.output_torque = 0.0;
   }
 }
 

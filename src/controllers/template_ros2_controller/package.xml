@@ -23,6 +23,9 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>generate_parameter_library</depend>
   <depend>fmt</depend>
+  <depend>TENSORRT</depend>
+
+  <build_depend>tensorrt_cmake_module</build_depend>
   
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_cmake_clang_format</test_depend>

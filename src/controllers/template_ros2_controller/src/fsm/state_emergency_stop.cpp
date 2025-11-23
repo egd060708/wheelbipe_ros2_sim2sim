@@ -20,12 +20,13 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processEmergencyStopState(const RobotState& robot_state, const rclcpp::Time& time)
+void StateMachine::processEmergencyStopState(RobotState& robot_state, const rclcpp::Time& time)
 {
-  (void)robot_state;
   (void)time;
   // 紧急停止状态：所有力矩立即设为0
-  std::fill(output_torques_.begin(), output_torques_.end(), 0.0);
+  for (auto& joint : robot_state.joints) {
+    joint.output_torque = 0.0;
+  }
   static rclcpp::Clock clock(RCL_ROS_TIME);
   RCLCPP_WARN_THROTTLE(logger_, clock, 1000,
     "Controller in EMERGENCY_STOP state");

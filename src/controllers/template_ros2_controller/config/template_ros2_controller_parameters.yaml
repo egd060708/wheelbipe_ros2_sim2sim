@@ -13,6 +13,18 @@ template_ros2_controller:
       read_only: true,
       validation: { unique<>: null },
     }
+  rl_model_path:
+    {
+      type: string,
+      default_value: "",
+      description: "Path to TensorRT engine model file for reinforcement learning inference",
+    }
+  rl_inference_frequency:
+    {
+      type: int,
+      default_value: 100,
+      description: "Reinforcement learning inference frequency in Hz",
+    }
   # sync_time_with_webots:
   #   {
   #     type: bool,

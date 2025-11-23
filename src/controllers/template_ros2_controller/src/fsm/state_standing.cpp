@@ -18,13 +18,13 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processStandingState(const RobotState& robot_state, const rclcpp::Time& time)
+void StateMachine::processStandingState(RobotState& robot_state, const rclcpp::Time& time)
 {
   (void)time;
   // 站立状态：保持平衡，可以添加平衡控制逻辑
   // 这里先设置为0，后续可以根据需要添加控制算法
-  for (size_t i = 0; i < output_torques_.size() && i < robot_state.joints.size(); ++i) {
-    output_torques_[i] = 0.0;
+  for (auto& joint : robot_state.joints) {
+    joint.output_torque = 0.0;
   }
 }
 

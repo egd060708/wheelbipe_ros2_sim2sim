@@ -19,12 +19,13 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processInitState(const RobotState& robot_state, const rclcpp::Time& time)
+void StateMachine::processInitState(RobotState& robot_state, const rclcpp::Time& time)
 {
-  (void)robot_state;
   (void)time;
   // 初始化状态：所有力矩设为0
-  std::fill(output_torques_.begin(), output_torques_.end(), 0.0);
+  for (auto& joint : robot_state.joints) {
+    joint.output_torque = 0.0;
+  }
 }
 
 }  // namespace robot_locomotion
