@@ -127,6 +127,9 @@ private:
 #else
   void* cuda_stream_;
 #endif
+
+  // 用于记录上次执行时间（用于时间间隔统计）
+  std::chrono::steady_clock::time_point last_execution_time_;
 };
 
 }  // namespace robot_locomotion

@@ -38,8 +38,7 @@ generate_parameter_library(template_ros2_controller_parameters
 
 pluginlib_export_plugin_description_file(controller_interface template_ros2_controller_plugin.xml)
 
-ament_auto_add_library(${PROJECT_NAME} SHARED
-  src/template_ros2_controller.cpp
+set(FSM_FILES
   src/fsm/state_machine.cpp
   src/fsm/state_base.cpp
   src/fsm/states/state_init.cpp
@@ -50,8 +49,26 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/fsm/states/state_running.cpp
   src/fsm/states/state_error.cpp
   src/fsm/states/state_emergency_stop.cpp
+)
+
+set(TENSORRT_CUDA_FILES
   src/tensorrt_cuda/tensorrt_inference.cpp
+)
+
+set(ROBOT_STATE_FILES
   src/robot_state/robot_state.cpp
+)
+
+set(CONTROLLER_MODULES_FILES
+  src/controller_modules/PIDmethod.cpp
+)
+
+ament_auto_add_library(${PROJECT_NAME} SHARED
+  ${FSM_FILES}
+  ${TENSORRT_CUDA_FILES}
+  ${ROBOT_STATE_FILES}
+  ${CONTROLLER_MODULES_FILES}
+  src/template_ros2_controller.cpp
 )
 
 # Link fmt::fmt before template_ros2_controller_parameters to ensure correct library is used

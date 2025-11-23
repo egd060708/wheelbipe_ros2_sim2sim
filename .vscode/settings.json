@@ -34,5 +34,9 @@
         "/home/lu/Git_Project/github/ros2_learning/dev_ws/install/learning_gazebo_harmonic/lib/python3.10/site-packages",
         "/home/lu/Git_Project/github/ros2_learning/dev_ws/install/learning_gazebo/lib/python3.10/site-packages",
         "/home/lu/Git_Project/github/ros2_learning/dev_ws/install/learning_cv/lib/python3.10/site-packages"
-    ]
+    ],
+    "files.associations": {
+        "atomic": "cpp",
+        "condition_variable": "cpp"
+    }
 }

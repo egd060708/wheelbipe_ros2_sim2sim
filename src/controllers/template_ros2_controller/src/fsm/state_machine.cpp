@@ -76,7 +76,7 @@ void StateMachine::update(RobotState& robot_state, const rclcpp::Time& time, con
   if (next_state != current_state_) {
     changeState(next_state, robot_state, time);
   }
-
+  
   // 运行当前状态
   if (current_state_obj_) {
     current_state_obj_->run(robot_state, time, period);

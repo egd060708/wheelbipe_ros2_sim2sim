@@ -18,6 +18,7 @@
 #include <vector>
 #include <string>
 #include <array>
+#include "utils/cppTypes.h"
 
 namespace robot_locomotion
 {
@@ -40,6 +41,24 @@ struct IMUState
   std::array<double, 4> orientation = {0.0, 0.0, 0.0, 1.0};     // 四元数 (x, y, z, w)
 };
 
+// 全身广义状态
+struct GeneralizedState
+{
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  Vec3<double> ang_vel_b;
+  Vec3<double> lin_acc_b;
+  Quat<double> orientation_b;
+  Vec3<double> rpy;
+  RotMat<double> rotation_b2w;// 机身系转到世界系的旋转矩阵
+};
+
+// 指令
+struct Command
+{
+  std::array<double, 3> cmd_vel = {0.0, 0.0, 0.0};  // 速度指令
+  double cmd_height = 0;              // 高度指令
+};
+
 // 机器人状态数据结构（暴露给状态机）
 struct RobotState
 {
@@ -49,9 +68,18 @@ struct RobotState
   // 传感器状态
   IMUState imu;
 
+  // 广义状态
+  GeneralizedState body_state;
+
+  // 运动指令
+  Command command;
+
   // 时间信息
   double timestamp = 0.0;        // 时间戳 (s)
   double period = 0.0;            // 控制周期 (s)
+
+  // 计算函数：计算各种状态表示
+  void run();
 
   // 辅助函数：根据关节名称查找关节状态
   JointState* findJoint(const std::string& joint_name);

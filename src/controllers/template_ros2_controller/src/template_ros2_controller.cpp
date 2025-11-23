@@ -14,6 +14,7 @@
 
 #include "template_ros2_controller/template_ros2_controller.hpp"
 // #include <template_ros2_controller/template_ros2_controller_parameters.hpp>
+#include "utils/timeMarker.h"
 
 #include "pluginlib/class_list_macros.hpp"
 namespace robot_locomotion
@@ -126,6 +127,16 @@ controller_interface::InterfaceConfiguration TemplateRos2Controller::state_inter
 controller_interface::return_type TemplateRos2Controller::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
+  // std::cout << period.nanoseconds() / 1000.0 << std::endl;
+  // long long _start_time = getSystemTime();
+  // static long long last_execution_time_ = getSystemTime();
+  // // 计算并打印两次执行之间的时间间隔
+  // if (last_execution_time_ > 0)
+  // {
+  //   long long time_diff = _start_time - last_execution_time_;
+  //   std::cout << "controller execution interval: " << time_diff << "us (" << time_diff / 1000.0 <<" ms)" << std::endl; 
+  // }
+  // last_execution_time_ = _start_time;
   // 更新参数（如果发生变化）
   if (param_listener_->is_old(params_)) {
     params_ = param_listener_->get_params();
@@ -197,6 +208,9 @@ void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rc
   // 更新时间信息
   robot_state_.timestamp = time.seconds();
   robot_state_.period = period.seconds();
+
+  // 计算广义状态
+  robot_state_.run();
 }
 
 // 从失能状态到激活状态

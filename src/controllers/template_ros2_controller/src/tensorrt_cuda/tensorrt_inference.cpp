@@ -60,6 +60,7 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , output_ready_(false)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
+  , last_execution_time_{}
 {
 }
 
@@ -382,8 +383,21 @@ void TensorRTInference::inferenceThread()
   RCLCPP_INFO(logger_, "TensorRT inference thread started");
 
   auto next_inference_time = std::chrono::steady_clock::now();
+  last_execution_time_ = std::chrono::steady_clock::time_point{};
 
   while (running_) {
+    // auto current_time = std::chrono::steady_clock::now();
+    
+    // // 计算并打印两次执行之间的时间间隔
+    // if (last_execution_time_.time_since_epoch().count() > 0)
+    // {
+    //   auto time_diff = std::chrono::duration_cast<std::chrono::microseconds>(
+    //       current_time - last_execution_time_);
+    //   RCLCPP_INFO(logger_, "inferenceThread execution interval: %lld us (%.3f ms)", 
+    //               time_diff.count(), time_diff.count() / 1000.0);
+    // }
+    // last_execution_time_ = current_time;
+    
     // 等待输入数据或停止信号
     std::unique_lock<std::mutex> lock(data_mutex_);
     data_ready_cv_.wait(lock, [this] { return new_input_available_ || !running_; });
@@ -468,6 +482,7 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , output_ready_(false)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
+  , last_execution_time_{}
 {
   RCLCPP_WARN(logger_, "TensorRT not available. RL inference will not work.");
 }

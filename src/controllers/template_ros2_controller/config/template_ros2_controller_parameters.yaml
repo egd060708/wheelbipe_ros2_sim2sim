@@ -16,13 +16,13 @@ template_ros2_controller:
   rl_model_path:
     {
       type: string,
-      default_value: "",
+      default_value: "/home/lu/Git_Project/github/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_direct/2025-11-20_13-06-13/exported/model_gn.engine",
       description: "Path to TensorRT engine model file for reinforcement learning inference",
     }
   rl_inference_frequency:
     {
       type: int,
-      default_value: 100,
+      default_value: 50,
       description: "Reinforcement learning inference frequency in Hz",
     }
   # sync_time_with_webots:
