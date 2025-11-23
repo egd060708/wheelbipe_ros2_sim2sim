@@ -12,21 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
-#include "robot_state/robot_state.hpp"
+#ifndef TEMPLATE_ROS2_CONTROLLER__STATE_WALKING_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__STATE_WALKING_HPP_
+
+#include "fsm/state_base.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processStandingState(RobotState& robot_state, const rclcpp::Time& time)
+// 行走状态类
+class StateWalking : public StateBase
 {
-  (void)time;
-  // 站立状态：保持平衡，可以添加平衡控制逻辑
-  // 这里先设置为0，后续可以根据需要添加控制算法
-  for (auto& joint : robot_state.joints) {
-    joint.output_torque = 0.0;
-  }
-}
+public:
+  StateWalking(StateMachine* state_machine, rclcpp::Logger logger);
+  virtual ~StateWalking() = default;
+
+  void enter(const RobotState& robot_state, const rclcpp::Time& time) override;
+  void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
+  void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
+  std::string getName() const override { return "WALKING"; }
+};
 
 }  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__STATE_WALKING_HPP_
 

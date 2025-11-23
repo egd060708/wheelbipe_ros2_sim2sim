@@ -18,6 +18,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <map>
 #include "rclcpp/rclcpp.hpp"
 
 namespace robot_locomotion
@@ -26,6 +27,7 @@ namespace robot_locomotion
 // 前向声明
 struct RobotState;
 class TensorRTInference;
+class StateBase;
 
 // 状态机状态枚举
 enum class ControllerState
@@ -55,6 +57,7 @@ public:
 
   // 获取状态名称
   std::string getStateName() const;
+  std::string getStateName(ControllerState state) const;
 
   // 设置目标状态（用于外部控制）
   void setTargetState(ControllerState target_state);
@@ -77,25 +80,38 @@ public:
   // 检查 RL 推理器是否已初始化
   bool isRLInferenceInitialized() const;
 
+  // 检查 RL 推理器是否正在运行
+  bool isRLInferenceRunning() const;
+
+  // 设置 RL 推理器输入
+  void setRLInput(const std::vector<float>& input_data);
+
+  // 获取 RL 推理器输出
+  bool getRLOutput(std::vector<float>& output_data);
+
+  // 获取目标状态
+  ControllerState getTargetState() const { return target_state_; }
+
 protected:
   // 状态转换逻辑
-  void handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time);
+  ControllerState handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time);
 
-  // 各状态的处理函数（由各个状态文件实现）
-  void processInitState(RobotState& robot_state, const rclcpp::Time& time);
-  void processIdleState(RobotState& robot_state, const rclcpp::Time& time);
-  void processRLState(RobotState& robot_state, const rclcpp::Time& time);
-  void processStandingState(RobotState& robot_state, const rclcpp::Time& time);
-  void processWalkingState(RobotState& robot_state, const rclcpp::Time& time);
-  void processRunningState(RobotState& robot_state, const rclcpp::Time& time);
-  void processErrorState(RobotState& robot_state, const rclcpp::Time& time);
-  void processEmergencyStopState(RobotState& robot_state, const rclcpp::Time& time);
+  // 切换状态
+  void changeState(ControllerState new_state, const RobotState& robot_state, const rclcpp::Time& time);
+
+  // 初始化所有状态对象
+  void initializeStates();
 
   ControllerState current_state_;
   ControllerState target_state_;
   rclcpp::Logger logger_;
   rclcpp::Time state_entry_time_;
   size_t num_joints_;
+  bool first_update_;
+
+  // 状态对象管理
+  std::map<ControllerState, std::unique_ptr<StateBase>> states_;
+  StateBase* current_state_obj_;
 
   // TensorRT 推理器（用于 RL 状态）
   std::unique_ptr<TensorRTInference> rl_inference_;

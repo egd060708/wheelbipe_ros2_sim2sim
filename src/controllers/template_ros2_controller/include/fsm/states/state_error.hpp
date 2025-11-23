@@ -12,21 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
-#include "robot_state/robot_state.hpp"
-#include <algorithm>
+#ifndef TEMPLATE_ROS2_CONTROLLER__STATE_ERROR_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__STATE_ERROR_HPP_
+
+#include "fsm/state_base.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processIdleState(RobotState& robot_state, const rclcpp::Time& time)
+// 错误状态类
+class StateError : public StateBase
 {
-  (void)time;
-  // 空闲状态：所有力矩设为0
-  for (auto& joint : robot_state.joints) {
-    joint.output_torque = 0.0;
-  }
-}
+public:
+  StateError(StateMachine* state_machine, rclcpp::Logger logger);
+  virtual ~StateError() = default;
+
+  void enter(const RobotState& robot_state, const rclcpp::Time& time) override;
+  void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
+  void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
+  std::string getName() const override { return "ERROR"; }
+};
 
 }  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__STATE_ERROR_HPP_
 

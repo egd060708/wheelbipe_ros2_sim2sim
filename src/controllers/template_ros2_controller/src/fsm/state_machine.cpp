@@ -13,6 +13,15 @@
 // limitations under the License.
 
 #include "fsm/state_machine.hpp"
+#include "fsm/state_base.hpp"
+#include "fsm/states/state_init.hpp"
+#include "fsm/states/state_idle.hpp"
+#include "fsm/states/state_rl.hpp"
+#include "fsm/states/state_standing.hpp"
+#include "fsm/states/state_walking.hpp"
+#include "fsm/states/state_running.hpp"
+#include "fsm/states/state_error.hpp"
+#include "fsm/states/state_emergency_stop.hpp"
 #include "tensorrt_cuda/tensorrt_inference.hpp"
 #include "robot_state/robot_state.hpp"
 
@@ -24,52 +33,57 @@ StateMachine::StateMachine(rclcpp::Logger logger)
   , target_state_(ControllerState::IDLE)
   , logger_(logger)
   , num_joints_(0)
+  , first_update_(true)
+  , current_state_obj_(nullptr)
 {
   state_entry_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+  initializeStates();
+  // 设置初始状态对象（不在这里调用 enter，在第一次 update 时调用）
+  if (states_.find(ControllerState::INIT) != states_.end()) {
+    current_state_obj_ = states_[ControllerState::INIT].get();
+  }
+}
+
+StateMachine::~StateMachine()
+{
+  // 调用当前状态的 exit（如果存在）
+  if (current_state_obj_) {
+    RobotState empty_state;
+    current_state_obj_->exit(empty_state, rclcpp::Time(0, 0, RCL_ROS_TIME));
+  }
+  // 停止 RL 推理器
+  stopRLInference();
+  // 状态对象会自动清理（通过 unique_ptr）
 }
 
 void StateMachine::update(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
-  (void)period;
-  
   // 更新关节数量（仅在第一次）
   if (num_joints_ == 0 && !robot_state.joints.empty()) {
     num_joints_ = robot_state.joints.size();
   }
 
-  // 处理状态转换
-  handleStateTransition(robot_state, time);
+  // 如果是第一次调用且当前状态对象存在，调用 enter
+  if (first_update_ && current_state_obj_) {
+    current_state_obj_->enter(robot_state, time);
+    first_update_ = false;
+  }
 
-  // 根据当前状态处理
-  switch (current_state_) {
-    case ControllerState::INIT:
-      processInitState(robot_state, time);
-      break;
-    case ControllerState::IDLE:
-      processIdleState(robot_state, time);
-      break;
-    case ControllerState::RL:
-      processRLState(robot_state, time);
-      break;
-    case ControllerState::STANDING:
-      processStandingState(robot_state, time);
-      break;
-    case ControllerState::WALKING:
-      processWalkingState(robot_state, time);
-      break;
-    case ControllerState::RUNNING:
-      processRunningState(robot_state, time);
-      break;
-    case ControllerState::ERROR:
-      processErrorState(robot_state, time);
-      break;
-    case ControllerState::EMERGENCY_STOP:
-      processEmergencyStopState(robot_state, time);
-      break;
+  // 处理状态转换
+  ControllerState next_state = handleStateTransition(robot_state, time);
+  
+  // 如果状态发生变化，执行状态切换
+  if (next_state != current_state_) {
+    changeState(next_state, robot_state, time);
+  }
+
+  // 运行当前状态
+  if (current_state_obj_) {
+    current_state_obj_->run(robot_state, time, period);
   }
 }
 
-void StateMachine::handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time)
+ControllerState StateMachine::handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time)
 {
   (void)robot_state;
   
@@ -123,40 +137,68 @@ void StateMachine::handleStateTransition(const RobotState& robot_state, const rc
       break;
   }
 
-  // 执行状态转换
-  if (next_state != current_state_) {
-    const char* next_state_name = [next_state]() -> const char* {
-      switch (next_state) {
-        case ControllerState::INIT: return "INIT";
-        case ControllerState::IDLE: return "IDLE";
-        case ControllerState::RL: return "RL";
-        case ControllerState::STANDING: return "STANDING";
-        case ControllerState::WALKING: return "WALKING";
-        case ControllerState::RUNNING: return "RUNNING";
-        case ControllerState::ERROR: return "ERROR";
-        case ControllerState::EMERGENCY_STOP: return "EMERGENCY_STOP";
-        default: return "UNKNOWN";
-      }
-    }();
-    RCLCPP_INFO(logger_, "State transition: %s -> %s",
-      getStateName().c_str(), next_state_name);
-    
-    // 离开 RL 状态时停止推理器
-    if (current_state_ == ControllerState::RL) {
-      stopRLInference();
-    }
-    
-    // 进入 RL 状态时启动推理器并更新目标状态
-    if (next_state == ControllerState::RL) {
-      if (isRLInferenceInitialized()) {
-        startRLInference();
-      }
-      // 更新目标状态为 RL，避免循环切换
-      target_state_ = ControllerState::RL;
-    }
-    
-    current_state_ = next_state;
-    state_entry_time_ = time;
+  return next_state;
+}
+
+void StateMachine::changeState(ControllerState new_state, const RobotState& robot_state, const rclcpp::Time& time)
+{
+  if (new_state == current_state_) {
+    return;
+  }
+
+  // 调用旧状态的 exit
+  if (current_state_obj_) {
+    current_state_obj_->exit(robot_state, time);
+  }
+
+  // 更新状态
+  ControllerState old_state = current_state_;
+  current_state_ = new_state;
+  state_entry_time_ = time;
+
+  // 更新状态对象指针
+  if (states_.find(new_state) != states_.end()) {
+    current_state_obj_ = states_[new_state].get();
+  } else {
+    current_state_obj_ = nullptr;
+    RCLCPP_ERROR(logger_, "State object not found for state: %d", static_cast<int>(new_state));
+  }
+
+  // 记录状态转换
+  RCLCPP_INFO(logger_, "State transition: %s -> %s",
+    getStateName(old_state).c_str(), getStateName(new_state).c_str());
+
+  // 调用新状态的 enter
+  if (current_state_obj_) {
+    current_state_obj_->enter(robot_state, time);
+  }
+}
+
+void StateMachine::initializeStates()
+{
+  // 初始化所有状态对象
+  states_[ControllerState::INIT] = std::make_unique<StateInit>(this, logger_);
+  states_[ControllerState::IDLE] = std::make_unique<StateIdle>(this, logger_);
+  states_[ControllerState::RL] = std::make_unique<StateRL>(this, logger_);
+  states_[ControllerState::STANDING] = std::make_unique<StateStanding>(this, logger_);
+  states_[ControllerState::WALKING] = std::make_unique<StateWalking>(this, logger_);
+  states_[ControllerState::RUNNING] = std::make_unique<StateRunning>(this, logger_);
+  states_[ControllerState::ERROR] = std::make_unique<StateError>(this, logger_);
+  states_[ControllerState::EMERGENCY_STOP] = std::make_unique<StateEmergencyStop>(this, logger_);
+}
+
+std::string StateMachine::getStateName(ControllerState state) const
+{
+  switch (state) {
+    case ControllerState::INIT: return "INIT";
+    case ControllerState::IDLE: return "IDLE";
+    case ControllerState::RL: return "RL";
+    case ControllerState::STANDING: return "STANDING";
+    case ControllerState::WALKING: return "WALKING";
+    case ControllerState::RUNNING: return "RUNNING";
+    case ControllerState::ERROR: return "ERROR";
+    case ControllerState::EMERGENCY_STOP: return "EMERGENCY_STOP";
+    default: return "UNKNOWN";
   }
 }
 
@@ -172,17 +214,7 @@ const std::vector<double> StateMachine::getOutputTorques(const RobotState& robot
 
 std::string StateMachine::getStateName() const
 {
-  switch (current_state_) {
-    case ControllerState::INIT: return "INIT";
-    case ControllerState::IDLE: return "IDLE";
-    case ControllerState::RL: return "RL";
-    case ControllerState::STANDING: return "STANDING";
-    case ControllerState::WALKING: return "WALKING";
-    case ControllerState::RUNNING: return "RUNNING";
-    case ControllerState::ERROR: return "ERROR";
-    case ControllerState::EMERGENCY_STOP: return "EMERGENCY_STOP";
-    default: return "UNKNOWN";
-  }
+  return getStateName(current_state_);
 }
 
 void StateMachine::setTargetState(ControllerState target_state)
@@ -198,6 +230,11 @@ void StateMachine::reset()
   current_state_ = ControllerState::INIT;
   target_state_ = ControllerState::IDLE;
   state_entry_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+  first_update_ = true;
+  // 更新状态对象指针
+  if (states_.find(ControllerState::INIT) != states_.end()) {
+    current_state_obj_ = states_[ControllerState::INIT].get();
+  }
 }
 
 bool StateMachine::initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz)
@@ -245,6 +282,26 @@ void StateMachine::stopRLInference()
 bool StateMachine::isRLInferenceInitialized() const
 {
   return rl_inference_ != nullptr && rl_inference_->isInitialized();
+}
+
+bool StateMachine::isRLInferenceRunning() const
+{
+  return rl_inference_ != nullptr && rl_inference_->isRunning();
+}
+
+void StateMachine::setRLInput(const std::vector<float>& input_data)
+{
+  if (rl_inference_) {
+    rl_inference_->setInput(input_data);
+  }
+}
+
+bool StateMachine::getRLOutput(std::vector<float>& output_data)
+{
+  if (rl_inference_) {
+    return rl_inference_->getOutput(output_data);
+  }
+  return false;
 }
 
 }  // namespace robot_locomotion

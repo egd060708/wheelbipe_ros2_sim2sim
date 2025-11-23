@@ -20,8 +20,9 @@ if(CMAKE_PREFIX_PATH)
 endif()
 # Set linker flags to exclude /usr/local/lib/libfmt.a from being linked
 # Use APPEND to ensure flags are added correctly
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed" CACHE STRING "" FORCE)
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed" CACHE STRING "" FORCE)
+# Explicitly exclude /usr/local/lib from library search path and exclude libfmt.a
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
 # Find fmt package, but prefer system libraries
 find_package(fmt REQUIRED PATHS /usr/lib/x86_64-linux-gnu/cmake /usr/lib/cmake NO_DEFAULT_PATH)
 if(NOT fmt_FOUND)
@@ -40,14 +41,15 @@ pluginlib_export_plugin_description_file(controller_interface template_ros2_cont
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/template_ros2_controller.cpp
   src/fsm/state_machine.cpp
-  src/fsm/state_init.cpp
-  src/fsm/state_idle.cpp
-  src/fsm/state_rl.cpp
-  src/fsm/state_standing.cpp
-  src/fsm/state_walking.cpp
-  src/fsm/state_running.cpp
-  src/fsm/state_error.cpp
-  src/fsm/state_emergency_stop.cpp
+  src/fsm/state_base.cpp
+  src/fsm/states/state_init.cpp
+  src/fsm/states/state_idle.cpp
+  src/fsm/states/state_rl.cpp
+  src/fsm/states/state_standing.cpp
+  src/fsm/states/state_walking.cpp
+  src/fsm/states/state_running.cpp
+  src/fsm/states/state_error.cpp
+  src/fsm/states/state_emergency_stop.cpp
   src/tensorrt_cuda/tensorrt_inference.cpp
   src/robot_state/robot_state.cpp
 )
@@ -55,9 +57,12 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 # Link fmt::fmt before template_ros2_controller_parameters to ensure correct library is used
 # Also set linker flags to exclude /usr/local/lib/libfmt.a and miniconda paths
 # Explicitly link to system libfmt.so.8 to avoid miniconda's libfmt.so.9
+# Use -L to prioritize system library path and exclude /usr/local/lib
+# Use --exclude-libs=ALL to prevent linking static libraries from all dependencies
 target_link_options(template_ros2_controller PRIVATE 
   -Wl,--as-needed
-  -Wl,--exclude-libs=libfmt.a
+  -Wl,--exclude-libs=ALL
+  -L/usr/lib/x86_64-linux-gnu
   -Wl,-rpath,/usr/lib/x86_64-linux-gnu
   # Remove miniconda from library search path
   -Wl,--rpath-link=/usr/lib/x86_64-linux-gnu
@@ -114,7 +119,12 @@ else()
 endif()
 
 # Link all libraries at once using plain signature to match ament_auto_add_library
-target_link_libraries(template_ros2_controller ${TEMPLATE_ROS2_CONTROLLER_LIBS})
+# Explicitly link to system libfmt.so.8 FIRST to override any fmt dependency from other libraries
+# Use -Wl,--exclude-libs=ALL to prevent linking static libraries from dependencies
+target_link_libraries(template_ros2_controller 
+  /usr/lib/x86_64-linux-gnu/libfmt.so.8
+  ${TEMPLATE_ROS2_CONTROLLER_LIBS}
+)
 
 # Use patchelf to fix library dependency from libfmt.so.9 to libfmt.so.8
 # This is needed because template_ros2_controller_parameters may link to miniconda's libfmt.so.9

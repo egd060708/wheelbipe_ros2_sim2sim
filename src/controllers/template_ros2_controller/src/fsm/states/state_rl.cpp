@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "fsm/states/state_rl.hpp"
 #include "fsm/state_machine.hpp"
 #include "tensorrt_cuda/tensorrt_inference.hpp"
 #include "robot_state/robot_state.hpp"
@@ -20,12 +21,29 @@
 namespace robot_locomotion
 {
 
-void StateMachine::processRLState(RobotState& robot_state, const rclcpp::Time& time)
+StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
+  : StateBase(state_machine, logger)
+{
+}
+
+void StateRL::enter(const RobotState& robot_state, const rclcpp::Time& time)
+{
+  (void)robot_state;
+  (void)time;
+  RCLCPP_INFO(logger_, "Entering RL state");
+  // 启动 RL 推理器
+  if (state_machine_ && state_machine_->isRLInferenceInitialized()) {
+    state_machine_->startRLInference();
+  }
+}
+
+void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
   (void)time;
+  (void)period;
   
   // 如果推理器未初始化，使用默认值
-  if (!rl_inference_ || !rl_inference_->isInitialized() || !rl_inference_->isRunning()) {
+  if (!state_machine_ || !state_machine_->isRLInferenceInitialized()) {
     // 默认行为：所有力矩设为0
     for (auto& joint : robot_state.joints) {
       joint.output_torque = 0.0;
@@ -34,7 +52,6 @@ void StateMachine::processRLState(RobotState& robot_state, const rclcpp::Time& t
   }
 
   // 准备输入数据：将机器人状态转换为模型输入
-  // 这里需要根据实际模型输入格式调整
   std::vector<float> model_input;
   
   // 添加关节位置
@@ -64,13 +81,12 @@ void StateMachine::processRLState(RobotState& robot_state, const rclcpp::Time& t
   }
 
   // 设置输入数据（触发推理）
-  rl_inference_->setInput(model_input);
+  state_machine_->setRLInput(model_input);
 
   // 获取推理输出
   std::vector<float> model_output;
-  if (rl_inference_->getOutput(model_output)) {
+  if (state_machine_->getRLOutput(model_output)) {
     // 将模型输出转换为关节力矩
-    // 假设模型输出直接对应关节力矩
     size_t output_size = std::min(model_output.size(), robot_state.joints.size());
     for (size_t i = 0; i < output_size; ++i) {
       robot_state.joints[i].output_torque = static_cast<double>(model_output[i]);
@@ -85,6 +101,17 @@ void StateMachine::processRLState(RobotState& robot_state, const rclcpp::Time& t
     for (auto& joint : robot_state.joints) {
       joint.output_torque = 0.0;
     }
+  }
+}
+
+void StateRL::exit(const RobotState& robot_state, const rclcpp::Time& time)
+{
+  (void)robot_state;
+  (void)time;
+  RCLCPP_INFO(logger_, "Exiting RL state");
+  // 停止 RL 推理器
+  if (state_machine_) {
+    state_machine_->stopRLInference();
   }
 }
 

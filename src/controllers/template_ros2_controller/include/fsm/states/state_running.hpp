@@ -12,25 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
-#include "robot_state/robot_state.hpp"
-#include <algorithm>
-#include "rclcpp/clock.hpp"
+#ifndef TEMPLATE_ROS2_CONTROLLER__STATE_RUNNING_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__STATE_RUNNING_HPP_
+
+#include "fsm/state_base.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processEmergencyStopState(RobotState& robot_state, const rclcpp::Time& time)
+// 跑步状态类
+class StateRunning : public StateBase
 {
-  (void)time;
-  // 紧急停止状态：所有力矩立即设为0
-  for (auto& joint : robot_state.joints) {
-    joint.output_torque = 0.0;
-  }
-  static rclcpp::Clock clock(RCL_ROS_TIME);
-  RCLCPP_WARN_THROTTLE(logger_, clock, 1000,
-    "Controller in EMERGENCY_STOP state");
-}
+public:
+  StateRunning(StateMachine* state_machine, rclcpp::Logger logger);
+  virtual ~StateRunning() = default;
+
+  void enter(const RobotState& robot_state, const rclcpp::Time& time) override;
+  void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
+  void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
+  std::string getName() const override { return "RUNNING"; }
+};
 
 }  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__STATE_RUNNING_HPP_
 

@@ -12,21 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
-#include "robot_state/robot_state.hpp"
-#include <algorithm>
+#ifndef TEMPLATE_ROS2_CONTROLLER__STATE_RL_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__STATE_RL_HPP_
+
+#include "fsm/state_base.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processInitState(RobotState& robot_state, const rclcpp::Time& time)
+// 强化学习状态类
+class StateRL : public StateBase
 {
-  (void)time;
-  // 初始化状态：所有力矩设为0
-  for (auto& joint : robot_state.joints) {
-    joint.output_torque = 0.0;
-  }
-}
+public:
+  StateRL(StateMachine* state_machine, rclcpp::Logger logger);
+  virtual ~StateRL() = default;
+
+  void enter(const RobotState& robot_state, const rclcpp::Time& time) override;
+  void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
+  void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
+  std::string getName() const override { return "RL"; }
+};
 
 }  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__STATE_RL_HPP_
 

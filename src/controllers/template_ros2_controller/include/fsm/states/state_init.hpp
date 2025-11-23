@@ -12,25 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
-#include "robot_state/robot_state.hpp"
-#include <algorithm>
-#include "rclcpp/clock.hpp"
+#ifndef TEMPLATE_ROS2_CONTROLLER__STATE_INIT_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__STATE_INIT_HPP_
+
+#include "fsm/state_base.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processErrorState(RobotState& robot_state, const rclcpp::Time& time)
+// 初始化状态类
+class StateInit : public StateBase
 {
-  (void)time;
-  // 错误状态：所有力矩设为0，确保安全
-  for (auto& joint : robot_state.joints) {
-    joint.output_torque = 0.0;
-  }
-  static rclcpp::Clock clock(RCL_ROS_TIME);
-  RCLCPP_ERROR_THROTTLE(logger_, clock, 1000,
-    "Controller in ERROR state");
-}
+public:
+  StateInit(StateMachine* state_machine, rclcpp::Logger logger);
+  virtual ~StateInit() = default;
+
+  void enter(const RobotState& robot_state, const rclcpp::Time& time) override;
+  void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
+  void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
+  std::string getName() const override { return "INIT"; }
+};
 
 }  // namespace robot_locomotion
+
+#endif  // TEMPLATE_ROS2_CONTROLLER__STATE_INIT_HPP_
 

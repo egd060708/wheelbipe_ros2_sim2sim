@@ -12,20 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fsm/state_machine.hpp"
+#include "fsm/states/state_standing.hpp"
 #include "robot_state/robot_state.hpp"
 
 namespace robot_locomotion
 {
 
-void StateMachine::processRunningState(RobotState& robot_state, const rclcpp::Time& time)
+StateStanding::StateStanding(StateMachine* state_machine, rclcpp::Logger logger)
+  : StateBase(state_machine, logger)
+{
+}
+
+void StateStanding::enter(const RobotState& robot_state, const rclcpp::Time& time)
+{
+  (void)robot_state;
+  (void)time;
+  RCLCPP_INFO(logger_, "Entering STANDING state");
+}
+
+void StateStanding::run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
   (void)time;
-  // 跑步状态：实现跑步控制逻辑
-  // 这里先设置为0，后续可以根据需要添加跑步算法
+  (void)period;
+  // 站立状态：保持平衡，可以添加平衡控制逻辑
+  // 这里先设置为0，后续可以根据需要添加控制算法
   for (auto& joint : robot_state.joints) {
     joint.output_torque = 0.0;
   }
+}
+
+void StateStanding::exit(const RobotState& robot_state, const rclcpp::Time& time)
+{
+  (void)robot_state;
+  (void)time;
+  RCLCPP_INFO(logger_, "Exiting STANDING state");
 }
 
 }  // namespace robot_locomotion
