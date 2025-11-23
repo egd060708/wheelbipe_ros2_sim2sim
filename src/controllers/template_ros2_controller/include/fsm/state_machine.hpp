@@ -20,6 +20,7 @@
 #include <vector>
 #include <map>
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 namespace robot_locomotion
 {
@@ -46,7 +47,7 @@ enum class ControllerState
 class StateMachine
 {
 public:
-  StateMachine(rclcpp::Logger logger);
+  StateMachine(rclcpp::Logger logger, rclcpp_lifecycle::LifecycleNode::SharedPtr node = nullptr);
   ~StateMachine();
 
   // 状态机更新函数，根据当前状态和机器人状态进行状态转换和输出计算
@@ -92,6 +93,9 @@ public:
   // 获取目标状态
   ControllerState getTargetState() const { return target_state_; }
 
+  // 设置时间源配置
+  void setTimingConfig(bool use_period_for_inference, bool use_period_for_lowlevel);
+
 protected:
   // 状态转换逻辑
   ControllerState handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time);
@@ -105,6 +109,7 @@ protected:
   ControllerState current_state_;
   ControllerState target_state_;
   rclcpp::Logger logger_;
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;  // 用于创建定时器
   rclcpp::Time state_entry_time_;
   size_t num_joints_;
   bool first_update_;
@@ -115,6 +120,10 @@ protected:
 
   // TensorRT 推理器（用于 RL 状态）
   std::unique_ptr<TensorRTInference> rl_inference_;
+  
+  // 时间源配置
+  bool use_period_for_inference_ = false;
+  bool use_period_for_lowlevel_ = false;
 };
 
 }  // namespace robot_locomotion

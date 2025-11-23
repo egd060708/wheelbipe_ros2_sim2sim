@@ -61,6 +61,9 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
   , last_execution_time_{}
+  , use_period_timing_(false)
+  , node_(nullptr)
+  , period_nanoseconds_(0)
 {
 }
 
@@ -81,6 +84,7 @@ bool TensorRTInference::initialize(const std::string& engine_model_path, int inf
   engine_model_path_ = engine_model_path;
   inference_frequency_hz_ = inference_frequency_hz;
   inference_period_ms_ = std::chrono::milliseconds(1000 / inference_frequency_hz_);
+  period_nanoseconds_ = (1000000000LL / inference_frequency_hz_);  // 转换为纳秒
 
   // 检查文件是否存在
   std::ifstream file(engine_model_path, std::ios::binary);
@@ -321,8 +325,24 @@ void TensorRTInference::start()
   }
 
   running_ = true;
-  inference_thread_ = std::thread(&TensorRTInference::inferenceThread, this);
-  RCLCPP_INFO(logger_, "TensorRT inference thread started");
+  
+  if (use_period_timing_ && node_) {
+    // 使用 ROS2 定时器
+    if (period_nanoseconds_ > 0) {
+      auto period_duration = rclcpp::Duration::from_nanoseconds(period_nanoseconds_);
+      ros_timer_ = node_->create_wall_timer(
+        std::chrono::nanoseconds(period_nanoseconds_),
+        std::bind(&TensorRTInference::inferenceCallback, this));
+      RCLCPP_INFO(logger_, "TensorRT inference started with ROS2 timer (period: %ld ns)", period_nanoseconds_);
+    } else {
+      RCLCPP_ERROR(logger_, "Cannot start ROS2 timer: period not set");
+      running_ = false;
+    }
+  } else {
+    // 使用独立线程（系统时间）
+    inference_thread_ = std::thread(&TensorRTInference::inferenceThread, this);
+    RCLCPP_INFO(logger_, "TensorRT inference thread started (system time)");
+  }
 }
 
 void TensorRTInference::stop()
@@ -334,11 +354,18 @@ void TensorRTInference::stop()
   running_ = false;
   data_ready_cv_.notify_all();
 
+  // 停止 ROS2 定时器
+  if (ros_timer_) {
+    ros_timer_->cancel();
+    ros_timer_.reset();
+  }
+
+  // 停止独立线程
   if (inference_thread_.joinable()) {
     inference_thread_.join();
   }
 
-  RCLCPP_INFO(logger_, "TensorRT inference thread stopped");
+  RCLCPP_INFO(logger_, "TensorRT inference stopped");
 }
 
 void TensorRTInference::setInput(const std::vector<float>& input_data)
@@ -378,6 +405,68 @@ bool TensorRTInference::getOutput(std::vector<float>& output_data)
   return false;
 }
 
+void TensorRTInference::setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNode::SharedPtr node)
+{
+  use_period_timing_ = use_period;
+  node_ = node;
+}
+
+void TensorRTInference::inferenceCallback()
+{
+  // ROS2 定时器回调函数
+  auto current_time = std::chrono::steady_clock::now();
+  
+  // 计算并打印两次执行之间的时间间隔
+  // if (last_execution_time_.time_since_epoch().count() > 0)
+  // {
+  //   auto time_diff = std::chrono::duration_cast<std::chrono::microseconds>(
+  //       current_time - last_execution_time_);
+  //   RCLCPP_INFO(logger_, "inferenceThread execution interval: %ld us (%.3f ms)", 
+  //               static_cast<long>(time_diff.count()), time_diff.count() / 1000.0);
+  // }
+  last_execution_time_ = current_time;
+
+  // 执行推理
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  
+  if (new_input_available_ && input_ready_) {
+    // 复制输入数据到 CUDA 缓冲区
+    cudaMemcpyAsync(input_buffer_, input_data_.data(), input_size_,
+                   cudaMemcpyHostToDevice, cuda_stream_);
+
+    // TensorRT 10 API: 使用 setTensorAddress 设置张量地址
+    if (!input_tensor_name_.empty() && !output_tensor_name_.empty()) {
+      context_->setTensorAddress(input_tensor_name_.c_str(), input_buffer_);
+      context_->setTensorAddress(output_tensor_name_.c_str(), output_buffer_);
+    } else {
+      RCLCPP_ERROR(logger_, "Tensor names not set");
+      new_input_available_ = false;
+      return;
+    }
+
+    // 执行推理 (TensorRT 10 API: use enqueueV3)
+    bool success = context_->enqueueV3(cuda_stream_);
+    
+    if (!success) {
+      RCLCPP_ERROR(logger_, "TensorRT inference failed");
+      new_input_available_ = false;
+      return;
+    }
+
+    // 同步 CUDA 流
+    cudaStreamSynchronize(cuda_stream_);
+
+    // 复制输出数据回主机
+    cudaMemcpyAsync(output_data_.data(), output_buffer_, output_size_,
+                   cudaMemcpyDeviceToHost, cuda_stream_);
+    cudaStreamSynchronize(cuda_stream_);
+
+    output_ready_ = true;
+    new_input_available_ = false;
+    inference_done_cv_.notify_one();
+  }
+}
+
 void TensorRTInference::inferenceThread()
 {
   RCLCPP_INFO(logger_, "TensorRT inference thread started");
@@ -386,17 +475,17 @@ void TensorRTInference::inferenceThread()
   last_execution_time_ = std::chrono::steady_clock::time_point{};
 
   while (running_) {
-    // auto current_time = std::chrono::steady_clock::now();
+    auto current_time = std::chrono::steady_clock::now();
     
-    // // 计算并打印两次执行之间的时间间隔
+    // 计算并打印两次执行之间的时间间隔
     // if (last_execution_time_.time_since_epoch().count() > 0)
     // {
     //   auto time_diff = std::chrono::duration_cast<std::chrono::microseconds>(
     //       current_time - last_execution_time_);
-    //   RCLCPP_INFO(logger_, "inferenceThread execution interval: %lld us (%.3f ms)", 
-    //               time_diff.count(), time_diff.count() / 1000.0);
+    //   RCLCPP_INFO(logger_, "inferenceThread execution interval: %ld us (%.3f ms)", 
+    //               static_cast<long>(time_diff.count()), time_diff.count() / 1000.0);
     // }
-    // last_execution_time_ = current_time;
+    last_execution_time_ = current_time;
     
     // 等待输入数据或停止信号
     std::unique_lock<std::mutex> lock(data_mutex_);
@@ -445,7 +534,7 @@ void TensorRTInference::inferenceThread()
 
     lock.unlock();
 
-    // 控制推理频率
+    // 使用系统时间进行频率控制（仅在不使用 ROS2 定时器时）
     next_inference_time += inference_period_ms_;
     std::this_thread::sleep_until(next_inference_time);
   }
@@ -483,6 +572,9 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
   , last_execution_time_{}
+  , use_period_timing_(false)
+  , node_(nullptr)
+  , period_nanoseconds_(0)
 {
   RCLCPP_WARN(logger_, "TensorRT not available. RL inference will not work.");
 }

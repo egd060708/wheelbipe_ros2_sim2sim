@@ -28,10 +28,11 @@
 namespace robot_locomotion
 {
 
-StateMachine::StateMachine(rclcpp::Logger logger)
+StateMachine::StateMachine(rclcpp::Logger logger, rclcpp_lifecycle::LifecycleNode::SharedPtr node)
   : current_state_(ControllerState::INIT)
   , target_state_(ControllerState::IDLE)
   , logger_(logger)
+  , node_(node)
   , num_joints_(0)
   , first_update_(true)
   , current_state_obj_(nullptr)
@@ -76,6 +77,8 @@ void StateMachine::update(RobotState& robot_state, const rclcpp::Time& time, con
   if (next_state != current_state_) {
     changeState(next_state, robot_state, time);
   }
+  
+  // 注意：如果使用 ROS2 定时器，不需要在这里更新，定时器会自动调度
   
   // 运行当前状态
   if (current_state_obj_) {
@@ -251,6 +254,9 @@ bool StateMachine::initializeRLInference(const std::string& engine_model_path, i
     return false;
   }
 
+  // 设置时间源配置
+  rl_inference_->setUsePeriodTiming(use_period_for_inference_);
+
   RCLCPP_INFO(logger_, "RL inference initialized (not started yet)");
   return true;
 }
@@ -302,6 +308,25 @@ bool StateMachine::getRLOutput(std::vector<float>& output_data)
     return rl_inference_->getOutput(output_data);
   }
   return false;
+}
+
+void StateMachine::setTimingConfig(bool use_period_for_inference, bool use_period_for_lowlevel)
+{
+  use_period_for_inference_ = use_period_for_inference;
+  use_period_for_lowlevel_ = use_period_for_lowlevel;
+  
+  // 设置推理器的配置（传递节点指针用于创建定时器）
+  if (rl_inference_) {
+    rl_inference_->setUsePeriodTiming(use_period_for_inference, node_);
+  }
+  
+  // 设置 RL 状态的配置（在 initializeStates 之后调用，传递节点指针）
+  if (states_.find(ControllerState::RL) != states_.end()) {
+    StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
+    if (rl_state) {
+      rl_state->setUsePeriodTiming(use_period_for_lowlevel, node_);
+    }
+  }
 }
 
 }  // namespace robot_locomotion

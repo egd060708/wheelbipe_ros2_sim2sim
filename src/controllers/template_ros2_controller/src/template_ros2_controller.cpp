@@ -49,8 +49,8 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   time_sync_enabled_ = false;  // params_.sync_time_with_webots;  // 暂时禁用
   last_update_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
   
-  // 初始化状态机
-  state_machine_ = std::make_unique<StateMachine>(get_node()->get_logger());
+  // 初始化状态机（传递节点指针用于创建定时器）
+  state_machine_ = std::make_unique<StateMachine>(get_node()->get_logger(), get_node());
   
   // 初始化 RL 推理器（如果模型路径已配置）
   if (!params_.rl_model_path.empty()) {
@@ -67,6 +67,11 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
     RCLCPP_INFO(get_node()->get_logger(), 
       "RL model path not configured, RL inference will not be available");
   }
+  
+  // 设置时间源配置
+  state_machine_->setTimingConfig(
+    params_.use_period_for_inference_timing,
+    params_.use_period_for_lowlevel_timing);
   
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -140,6 +145,12 @@ controller_interface::return_type TemplateRos2Controller::update(
   // 更新参数（如果发生变化）
   if (param_listener_->is_old(params_)) {
     params_ = param_listener_->get_params();
+    // 更新时间源配置
+    if (state_machine_) {
+      state_machine_->setTimingConfig(
+        params_.use_period_for_inference_timing,
+        params_.use_period_for_lowlevel_timing);
+    }
   }
 
   // 1. 更新机器人状态数据结构
@@ -155,16 +166,16 @@ controller_interface::return_type TemplateRos2Controller::update(
     }
     
     // 如果关节数量不匹配，使用默认逻辑
-    if (robot_state_.joints.size() != joints_.size()) {
-      // 默认逻辑：保持原有行为（用于兼容）
-      for (std::shared_ptr<Joint> joint : joints_) {
-        if (joint->name == "left_spring2_joint" || joint->name == "right_spring2_joint") {
-          joint->effort_command_handle->get().set_value(240);
-        } else {
-          joint->effort_command_handle->get().set_value(0);
-        }
-      }
-    }
+    // if (robot_state_.joints.size() != joints_.size()) {
+    //   // 默认逻辑：保持原有行为（用于兼容）
+    //   for (std::shared_ptr<Joint> joint : joints_) {
+    //     if (joint->name == "left_spring2_joint" || joint->name == "right_spring2_joint") {
+    //       joint->effort_command_handle->get().set_value(240);
+    //     } else {
+    //       joint->effort_command_handle->get().set_value(0);
+    //     }
+    //   }
+    // }
   } else {
     // 如果状态机未初始化，使用默认逻辑
     for (std::shared_ptr<Joint> joint : joints_) {

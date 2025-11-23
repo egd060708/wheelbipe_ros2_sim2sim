@@ -25,6 +25,18 @@ template_ros2_controller:
       default_value: 50,
       description: "Reinforcement learning inference frequency in Hz",
     }
+  use_period_for_inference_timing:
+    {
+      type: bool,
+      default_value: false,
+      description: "Use controller period for inference thread timing instead of system time",
+    }
+  use_period_for_lowlevel_timing:
+    {
+      type: bool,
+      default_value: false,
+      description: "Use controller period for lowlevel control thread timing instead of system time",
+    }
   # sync_time_with_webots:
   #   {
   #     type: bool,

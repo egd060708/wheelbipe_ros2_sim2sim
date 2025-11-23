@@ -21,6 +21,8 @@
 #include <mutex>
 #include "controller_modules/PIDmethod.h"
 #include "robot_state/robot_state.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 namespace robot_locomotion
 {
@@ -82,6 +84,13 @@ public:
   void run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period) override;
   void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
   std::string getName() const override { return "RL"; }
+  
+  // 设置是否使用 period 进行频率计算（需要传递节点指针用于创建定时器）
+  void setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNode::SharedPtr node = nullptr);
+  
+  // 低层控制回调函数（用于定时器）
+  void lowlevelCallback();
+  
 private:
   std::array<float, 6> last_actions_ = {0};
   
@@ -108,6 +117,14 @@ private:
   
   // 用于记录上次执行时间（微秒）
   long long last_execution_time_ = 0;
+  
+  // 是否使用 period 进行频率计算
+  bool use_period_timing_ = false;
+  
+  // ROS2 定时器（当使用 ROS2 时间时）
+  rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
+  rclcpp::TimerBase::SharedPtr ros_timer_;
+  long long period_microseconds_ = 0;
 };
 
 }  // namespace robot_locomotion
