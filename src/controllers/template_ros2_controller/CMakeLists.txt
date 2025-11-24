@@ -21,8 +21,15 @@ endif()
 # Set linker flags to exclude /usr/local/lib/libfmt.a from being linked
 # Use APPEND to ensure flags are added correctly
 # Explicitly exclude /usr/local/lib from library search path and exclude libfmt.a
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
+# Use -Wl,--exclude-libs=ALL to exclude all static libraries from dependencies
+# Also use -Wl,--exclude-libs=libfmt.a to explicitly exclude libfmt.a
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
+# Remove /usr/local/lib from library search paths
+set(CMAKE_LIBRARY_PATH "${CMAKE_LIBRARY_PATH}" CACHE STRING "" FORCE)
+list(REMOVE_ITEM CMAKE_LIBRARY_PATH "/usr/local/lib")
+# Also remove /usr/local/lib from link directories
+link_directories(/usr/lib/x86_64-linux-gnu)
 # Find fmt package, but prefer system libraries
 find_package(fmt REQUIRED PATHS /usr/lib/x86_64-linux-gnu/cmake /usr/lib/cmake NO_DEFAULT_PATH)
 if(NOT fmt_FOUND)
@@ -71,18 +78,27 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/template_ros2_controller.cpp
 )
 
+# Set linker flags on the target to exclude libfmt.a
+# This must be done after ament_auto_add_library
+target_link_options(${PROJECT_NAME} PRIVATE
+  -Wl,--exclude-libs=libfmt.a
+  -Wl,--exclude-libs=ALL
+)
+
 # Link fmt::fmt before template_ros2_controller_parameters to ensure correct library is used
 # Also set linker flags to exclude /usr/local/lib/libfmt.a and miniconda paths
 # Explicitly link to system libfmt.so.8 to avoid miniconda's libfmt.so.9
 # Use -L to prioritize system library path and exclude /usr/local/lib
 # Use --exclude-libs=ALL to prevent linking static libraries from all dependencies
+# Explicitly exclude /usr/local/lib from library search
 target_link_options(template_ros2_controller PRIVATE 
   -Wl,--as-needed
   -Wl,--exclude-libs=ALL
   -L/usr/lib/x86_64-linux-gnu
   -Wl,-rpath,/usr/lib/x86_64-linux-gnu
-  # Remove miniconda from library search path
   -Wl,--rpath-link=/usr/lib/x86_64-linux-gnu
+  -Wl,--exclude-libs=libfmt.a
+  -Wl,--exclude-libs=ALL
 )
 # Find TensorRT and CUDA
 find_path(TENSORRT_INCLUDE_DIR NvInfer.h
@@ -138,6 +154,11 @@ endif()
 # Link all libraries at once using plain signature to match ament_auto_add_library
 # Explicitly link to system libfmt.so.8 FIRST to override any fmt dependency from other libraries
 # Use -Wl,--exclude-libs=ALL to prevent linking static libraries from dependencies
+# Use target_link_options to ensure /usr/local/lib/libfmt.a is excluded
+target_link_options(template_ros2_controller PRIVATE
+  -Wl,--exclude-libs=libfmt.a
+  -Wl,--exclude-libs=ALL
+)
 target_link_libraries(template_ros2_controller 
   /usr/lib/x86_64-linux-gnu/libfmt.so.8
   ${TEMPLATE_ROS2_CONTROLLER_LIBS}

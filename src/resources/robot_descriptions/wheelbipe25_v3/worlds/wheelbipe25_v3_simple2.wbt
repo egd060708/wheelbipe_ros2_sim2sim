@@ -20,8 +20,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.13289357126768991 0.05612052915765227 -0.9895401886344912 1.239161730881857
-  position -0.25699379275664563 0.8973303124521473 0.3430559279978151
+  orientation -0.1703396690148704 0.11381763086553404 0.978790040848425 2.0400588895077196
+  position 0.6971150851992282 -1.603725451646934 0.8355284645738132
 }
 TexturedBackground {
 }
@@ -161,29 +161,7 @@ Robot {
                 }
               ]
               name "right_rear2_link"
-              boundingObject Group {
-                children [
-                  Pose {
-                    translation -0.0025 -0.01 -0.0425
-                    rotation 1 0 0 1.5707996938995747
-                    children [
-                      Cylinder {
-                        height 0.01
-                        radius 0.015
-                      }
-                    ]
-                  }
-                  Pose {
-                    translation 0.1 0.005 -0.07
-                    rotation 0 1 0 0.63
-                    children [
-                      Box {
-                        size 0.28 0.015 0.05
-                      }
-                    ]
-                  }
-                ]
-              }
+              boundingObject USE right_rear2_link
               physics Physics {
                 density -1
                 mass 0.381557
@@ -251,6 +229,7 @@ Robot {
                       }
                     ]
                     name "right_spring2_link"
+                    boundingObject USE right_spring2_link
                     physics Physics {
                       density -1
                       mass 0.169064
@@ -266,6 +245,7 @@ Robot {
                 }
               ]
               name "right_spring1_link"
+              boundingObject USE right_spring1_link
               physics Physics {
                 density -1
                 mass 0.026477
@@ -281,6 +261,7 @@ Robot {
           }
         ]
         name "right_rear1_link"
+        boundingObject USE right_rear1_link
         physics Physics {
           density -1
           mass 0.440862
@@ -394,6 +375,7 @@ Robot {
                             }
                           ]
                           name "right_front4_link"
+                          boundingObject USE right_front4_link
                           physics Physics {
                             density -1
                             mass 0.092614
@@ -409,6 +391,7 @@ Robot {
                       }
                     ]
                     name "right_front3_link"
+                    boundingObject USE right_front3_link
                     physics Physics {
                       density -1
                       mass 0.071354
@@ -424,6 +407,7 @@ Robot {
                 }
               ]
               name "right_front2_link"
+              boundingObject USE right_front2_link
               physics Physics {
                 density -1
                 mass 0.077576
@@ -439,6 +423,7 @@ Robot {
           }
         ]
         name "right_front1_link"
+        boundingObject USE right_front1_link
         physics Physics {
           density -1
           mass 0.158567
@@ -554,29 +539,7 @@ Robot {
                 }
               ]
               name "left_rear2_link"
-              boundingObject Group {
-                children [
-                  Pose {
-                    translation -0.0025 0.01 -0.0425
-                    rotation 1 0 0 1.5707996938995747
-                    children [
-                      Cylinder {
-                        height 0.01
-                        radius 0.015
-                      }
-                    ]
-                  }
-                  Pose {
-                    translation 0.1 -0.005 -0.07
-                    rotation 0 1 0 0.63
-                    children [
-                      Box {
-                        size 0.28 0.015 0.05
-                      }
-                    ]
-                  }
-                ]
-              }
+              boundingObject USE left_rear2_link
               physics Physics {
                 density -1
                 mass 0.321595
@@ -645,6 +608,7 @@ Robot {
                       }
                     ]
                     name "left_spring2_link"
+                    boundingObject USE left_spring2_link
                     physics Physics {
                       density -1
                       mass 0.169064
@@ -660,6 +624,7 @@ Robot {
                 }
               ]
               name "left_spring1_link"
+              boundingObject USE left_spring1_link
               physics Physics {
                 density -1
                 mass 0.026477
@@ -675,6 +640,7 @@ Robot {
           }
         ]
         name "left_rear1_link"
+        boundingObject USE left_rear1_link
         physics Physics {
           density -1
           mass 0.503388
@@ -791,6 +757,7 @@ Robot {
                             }
                           ]
                           name "left_front4_link"
+                          boundingObject USE left_front4_link
                           physics Physics {
                             density -1
                             mass 0.093045
@@ -806,6 +773,7 @@ Robot {
                       }
                     ]
                     name "left_front3_link"
+                    boundingObject USE left_front3_link
                     physics Physics {
                       density -1
                       mass 0.071354
@@ -821,6 +789,7 @@ Robot {
                 }
               ]
               name "left_front2_link"
+              boundingObject USE left_front2_link
               physics Physics {
                 density -1
                 mass 0.077576
@@ -836,6 +805,7 @@ Robot {
           }
         ]
         name "left_front1_link"
+        boundingObject USE left_front1_link
         physics Physics {
           density -1
           mass 0.158567

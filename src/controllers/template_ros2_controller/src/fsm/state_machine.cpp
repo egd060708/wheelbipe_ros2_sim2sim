@@ -95,14 +95,14 @@ ControllerState StateMachine::handleStateTransition(const RobotState& robot_stat
   switch (current_state_) {
     case ControllerState::INIT:
       // 初始化完成后进入空闲状态
-      if ((time - state_entry_time_).seconds() > 0.1) {
+      if ((time - state_entry_time_).seconds() > 0.01) {
         next_state = ControllerState::IDLE;
       }
       break;
 
     case ControllerState::IDLE:
       // 空闲状态后自动进入强化学习状态
-      if ((time - state_entry_time_).seconds() > 1.0) {
+      if ((time - state_entry_time_).seconds() > 5.) {
         this->setTargetState(ControllerState::RL);
       }
       // 如果设置了目标状态，也可以转换到目标状态

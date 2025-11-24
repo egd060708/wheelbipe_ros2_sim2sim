@@ -26,8 +26,8 @@ StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
   : StateBase(state_machine, logger)
 {
   // 初始化参数
-  this->params_.joint_damping = -0.5f;
-  this->params_.joint_stiffness = 30.f;
+  this->params_.joint_damping = -1.0f;
+  this->params_.joint_stiffness = 40.f;
   this->params_.wheel_damping = -0.01f;
   this->params_.wheel_stiffness = 0.f;
   this->params_.joint_action_scale = 0.5f;
@@ -302,7 +302,7 @@ void StateRL::_Run_Lowlevel()
     this->last_execution_time_ = _start_time;
     
     // 使用系统时间进行频率控制（默认 5ms）
-    absoluteWait(_start_time, (long long)(0.005 * 1000000));
+    absoluteWait(_start_time, (long long)(0.002 * 1000000));
   }
   this->threadRunning = false;
 }
