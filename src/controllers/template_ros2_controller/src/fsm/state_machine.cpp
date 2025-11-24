@@ -102,7 +102,7 @@ ControllerState StateMachine::handleStateTransition(const RobotState& robot_stat
 
     case ControllerState::IDLE:
       // 空闲状态后自动进入强化学习状态
-      if ((time - state_entry_time_).seconds() > 5.) {
+      if ((time - state_entry_time_).seconds() > 1.) {
         this->setTargetState(ControllerState::RL);
       }
       // 如果设置了目标状态，也可以转换到目标状态

@@ -90,6 +90,9 @@ public:
   
   // 低层控制回调函数（用于定时器）
   void lowlevelCallback();
+
+  // 简化底层策略
+  void simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time& time);
   
 private:
   std::array<float, 6> last_actions_ = {0};

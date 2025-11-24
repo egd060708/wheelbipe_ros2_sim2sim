@@ -96,6 +96,9 @@ public:
   // 设置时间源配置
   void setTimingConfig(bool use_period_for_inference, bool use_period_for_lowlevel);
 
+  // TensorRT 推理器（用于 RL 状态）
+  std::unique_ptr<TensorRTInference> rl_inference_;
+
 protected:
   // 状态转换逻辑
   ControllerState handleStateTransition(const RobotState& robot_state, const rclcpp::Time& time);
@@ -118,8 +121,8 @@ protected:
   std::map<ControllerState, std::unique_ptr<StateBase>> states_;
   StateBase* current_state_obj_;
 
-  // TensorRT 推理器（用于 RL 状态）
-  std::unique_ptr<TensorRTInference> rl_inference_;
+  // // TensorRT 推理器（用于 RL 状态）
+  // std::unique_ptr<TensorRTInference> rl_inference_;
   
   // 时间源配置
   bool use_period_for_inference_ = false;

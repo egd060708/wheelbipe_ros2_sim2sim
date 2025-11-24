@@ -327,17 +327,17 @@ void TensorRTInference::start()
   running_ = true;
   
   if (use_period_timing_ && node_) {
-    // 使用 ROS2 定时器
-    if (period_nanoseconds_ > 0) {
-      auto period_duration = rclcpp::Duration::from_nanoseconds(period_nanoseconds_);
-      ros_timer_ = node_->create_wall_timer(
-        std::chrono::nanoseconds(period_nanoseconds_),
-        std::bind(&TensorRTInference::inferenceCallback, this));
-      RCLCPP_INFO(logger_, "TensorRT inference started with ROS2 timer (period: %ld ns)", period_nanoseconds_);
-    } else {
-      RCLCPP_ERROR(logger_, "Cannot start ROS2 timer: period not set");
-      running_ = false;
-    }
+    // // 使用 ROS2 定时器
+    // if (period_nanoseconds_ > 0) {
+    //   auto period_duration = rclcpp::Duration::from_nanoseconds(period_nanoseconds_);
+    //   ros_timer_ = node_->create_wall_timer(
+    //     std::chrono::nanoseconds(period_nanoseconds_),
+    //     std::bind(&TensorRTInference::inferenceCallback, this));
+    //   RCLCPP_INFO(logger_, "TensorRT inference started with ROS2 timer (period: %ld ns)", period_nanoseconds_);
+    // } else {
+    //   RCLCPP_ERROR(logger_, "Cannot start ROS2 timer: period not set");
+    //   running_ = false;
+    // }
   } else {
     // 使用独立线程（系统时间）
     inference_thread_ = std::thread(&TensorRTInference::inferenceThread, this);

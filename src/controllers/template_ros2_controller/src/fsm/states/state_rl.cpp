@@ -26,8 +26,8 @@ StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
   : StateBase(state_machine, logger)
 {
   // 初始化参数
-  this->params_.joint_damping = -1.0f;
-  this->params_.joint_stiffness = 40.f;
+  this->params_.joint_damping = -0.5f;
+  this->params_.joint_stiffness = 30.f;
   this->params_.wheel_damping = -0.01f;
   this->params_.wheel_stiffness = 0.f;
   this->params_.joint_action_scale = 0.5f;
@@ -87,16 +87,16 @@ void StateRL::enter(const RobotState& robot_state, const rclcpp::Time& time)
   
   // 根据配置选择使用 ROS2 定时器或独立线程
   if (use_period_timing_ && node_) {
-    // 使用 ROS2 定时器（period 会在 run() 中设置）
-    // 如果 period 还未设置，等待 run() 调用
-    if (period_microseconds_ > 0) {
-      ros_timer_ = node_->create_wall_timer(
-        std::chrono::microseconds(period_microseconds_),
-        std::bind(&StateRL::lowlevelCallback, this));
-      RCLCPP_INFO(logger_, "Lowlevel control started with ROS2 timer (period: %lld us)", period_microseconds_);
-    } else {
-      RCLCPP_WARN(logger_, "Lowlevel control: ROS2 timer will be created after period is set");
-    }
+    // // 使用 ROS2 定时器（period 会在 run() 中设置）
+    // // 如果 period 还未设置，等待 run() 调用
+    // if (period_microseconds_ > 0) {
+    //   ros_timer_ = node_->create_wall_timer(
+    //     std::chrono::microseconds(period_microseconds_),
+    //     std::bind(&StateRL::lowlevelCallback, this));
+    //   RCLCPP_INFO(logger_, "Lowlevel control started with ROS2 timer (period: %lld us)", period_microseconds_);
+    // } else {
+    //   RCLCPP_WARN(logger_, "Lowlevel control: ROS2 timer will be created after period is set");
+    // }
   } else {
     // 使用独立线程（系统时间）
     if (this->thread_first_)
@@ -108,29 +108,30 @@ void StateRL::enter(const RobotState& robot_state, const rclcpp::Time& time)
   }
 }
 
-void StateRL::run(RobotState& robot_state, const rclcpp::Time& /* time */, const rclcpp::Duration& period)
+void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
+  static float last_enable_time = 0.;
   // 更新 period（如果使用 period 进行频率计算）
-  if (use_period_timing_) {
-    long long new_period_microseconds = period.nanoseconds() / 1000;
-    if (new_period_microseconds != period_microseconds_) {
-      period_microseconds_ = new_period_microseconds;
-      // 如果定时器还未创建，现在创建它
-      if (node_ && !ros_timer_ && period_microseconds_ > 0) {
-        ros_timer_ = node_->create_wall_timer(
-          std::chrono::microseconds(period_microseconds_),
-          std::bind(&StateRL::lowlevelCallback, this));
-        RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer created (period: %lld us)", period_microseconds_);
-      } else if (ros_timer_ && period_microseconds_ > 0) {
-        // 如果定时器已存在但 period 改变了，需要重新创建
-        ros_timer_->cancel();
-        ros_timer_ = node_->create_wall_timer(
-          std::chrono::microseconds(period_microseconds_),
-          std::bind(&StateRL::lowlevelCallback, this));
-        RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer updated (period: %lld us)", period_microseconds_);
-      }
-    }
-  }
+  // if (use_period_timing_) {
+  //   long long new_period_microseconds = period.nanoseconds() / 1000;
+  //   if (new_period_microseconds != period_microseconds_) {
+  //     period_microseconds_ = new_period_microseconds;
+  //     // 如果定时器还未创建，现在创建它
+  //     if (node_ && !ros_timer_ && period_microseconds_ > 0) {
+  //       ros_timer_ = node_->create_wall_timer(
+  //         std::chrono::microseconds(period_microseconds_),
+  //         std::bind(&StateRL::lowlevelCallback, this));
+  //       RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer created (period: %lld us)", period_microseconds_);
+  //     } else if (ros_timer_ && period_microseconds_ > 0) {
+  //       // 如果定时器已存在但 period 改变了，需要重新创建
+  //       ros_timer_->cancel();
+  //       ros_timer_ = node_->create_wall_timer(
+  //         std::chrono::microseconds(period_microseconds_),
+  //         std::bind(&StateRL::lowlevelCallback, this));
+  //       RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer updated (period: %lld us)", period_microseconds_);
+  //     }
+  //   }
+  // }
   
   // 更新线程安全的 robot_state 副本（供低层控制线程使用）
   {
@@ -193,6 +194,14 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& /* time */, const
   // 设置输入数据（触发推理）
   state_machine_->setRLInput(model_input);
 
+  if (use_period_timing_)
+  {
+    if (time.seconds()-last_enable_time>0.02){
+      state_machine_->rl_inference_->inferenceCallback();
+      last_enable_time = time.seconds();
+    }
+  }
+
   // 获取推理输出
   std::vector<float> model_output;
   if (state_machine_->getRLOutput(model_output)) {
@@ -201,7 +210,7 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& /* time */, const
     
     for (size_t i = 0; i < output_size; ++i) {
       if(i<4){
-        this->desired_pos[i] = this->params_.joint_action_scale*static_cast<double>(model_output[i])+this->params_.default_dof_pos[i];
+        // this->desired_pos[i] = this->params_.joint_action_scale*static_cast<double>(model_output[i])+this->params_.default_dof_pos[i];
       }
       else{
         this->desired_pos[i] = this->params_.wheel_action_scale*static_cast<double>(model_output[i]);
@@ -209,6 +218,12 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& /* time */, const
       this->last_actions_[i] = model_output[i];
     }
   }
+
+  if (use_period_timing_)
+  {
+    simplelowlevelCallbask(robot_state, time);
+  }
+
   // 输出力矩（从线程安全的 torque 数组中读取）
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
@@ -260,6 +275,51 @@ void StateRL::setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNod
   node_ = node;
 }
 
+void StateRL::simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time& time)
+{
+  static float last_enable_time = 0;
+  if(time.seconds()-last_enable_time>0.005)
+  {
+    for (int i=0; i < 6; i++){
+      if (i < static_cast<int>(robot_state.joints.size())) {
+        if(i<4){
+          if(this->desired_pos[i]>3.14)
+          {
+            this->desired_pos[i]=3.14;
+          }
+          else if(this->desired_pos[i]<-3.14)
+          {
+            this->desired_pos[i]=-3.14;
+          }
+          this->torque[i] = this->params_.joint_stiffness*(this->desired_pos[i]-robot_state.joints[i].position)
+                            + this->params_.joint_damping*robot_state.joints[i].velocity;
+        }
+        else{
+          this->torque[i] = this->desired_pos[i] + this->params_.wheel_damping*robot_state.joints[i].velocity;
+        }
+        if(i<4){
+          if(this->torque[i]>39.9){
+            this->torque[i] = 39.9;
+          }
+          if(this->torque[i]<-39.9){
+            this->torque[i] = -39.9;
+          }
+        }
+        else
+        {
+          if(this->torque[i]>4.99){
+            this->torque[i] = 4.99;
+          }
+          if(this->torque[i]<-4.99){
+            this->torque[i] = -4.99;
+          }
+        }
+      }
+    }
+    last_enable_time = time.seconds();
+  }
+}
+
 void StateRL::lowlevelCallback()
 {
   // ROS2 定时器回调函数
@@ -302,7 +362,7 @@ void StateRL::_Run_Lowlevel()
     this->last_execution_time_ = _start_time;
     
     // 使用系统时间进行频率控制（默认 5ms）
-    absoluteWait(_start_time, (long long)(0.002 * 1000000));
+    absoluteWait(_start_time, (long long)(0.005 * 1000000));
   }
   this->threadRunning = false;
 }
