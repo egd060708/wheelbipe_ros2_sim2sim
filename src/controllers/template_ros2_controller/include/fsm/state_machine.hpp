@@ -20,6 +20,8 @@
 #include <vector>
 #include <map>
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/clock.hpp"
+#include "rcl/time.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 namespace robot_locomotion
@@ -93,8 +95,11 @@ public:
   // 获取目标状态
   ControllerState getTargetState() const { return target_state_; }
 
-  // 设置时间源配置
-  void setTimingConfig(bool use_period_for_inference, bool use_period_for_lowlevel);
+  // 设置调度模式与定时器时钟
+  void setTimingConfig(int inference_mode, int lowlevel_mode,
+                       const std::string& inference_clock_type,
+                       const std::string& lowlevel_clock_type);
+  void setLowlevelFrequency(double freq_hz);
 
   // TensorRT 推理器（用于 RL 状态）
   std::unique_ptr<TensorRTInference> rl_inference_;
@@ -124,9 +129,12 @@ protected:
   // // TensorRT 推理器（用于 RL 状态）
   // std::unique_ptr<TensorRTInference> rl_inference_;
   
-  // 时间源配置
-  bool use_period_for_inference_ = false;
-  bool use_period_for_lowlevel_ = false;
+  // 调度模式与时钟
+  int inference_mode_ = 0;
+  int lowlevel_mode_ = 0;
+  rcl_clock_type_t inference_clock_type_ = RCL_ROS_TIME;
+  rcl_clock_type_t lowlevel_clock_type_ = RCL_ROS_TIME;
+  double lowlevel_frequency_hz_ = 500.0;  // 默认 500Hz
 };
 
 }  // namespace robot_locomotion

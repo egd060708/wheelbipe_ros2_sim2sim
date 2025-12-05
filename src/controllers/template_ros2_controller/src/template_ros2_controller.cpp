@@ -68,10 +68,13 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
       "RL model path not configured, RL inference will not be available");
   }
   
-  // 设置时间源配置
+  // 设置调度配置
   state_machine_->setTimingConfig(
-    params_.use_period_for_inference_timing,
-    params_.use_period_for_lowlevel_timing);
+    params_.inference_mode,
+    params_.lowlevel_mode,
+    params_.inference_timer_clock_type,
+    params_.lowlevel_timer_clock_type);
+  state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
   
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -145,11 +148,14 @@ controller_interface::return_type TemplateRos2Controller::update(
   // 更新参数（如果发生变化）
   if (param_listener_->is_old(params_)) {
     params_ = param_listener_->get_params();
-    // 更新时间源配置
+    // 更新时间/调度配置
     if (state_machine_) {
       state_machine_->setTimingConfig(
-        params_.use_period_for_inference_timing,
-        params_.use_period_for_lowlevel_timing);
+        params_.inference_mode,
+        params_.lowlevel_mode,
+        params_.inference_timer_clock_type,
+        params_.lowlevel_timer_clock_type);
+      state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
     }
   }
 

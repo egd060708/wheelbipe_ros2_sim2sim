@@ -27,17 +27,38 @@ template_ros2_controller:
       default_value: 50,
       description: "Reinforcement learning inference frequency in Hz",
     }
-  use_period_for_inference_timing:
+  rl_lowlevel_frequency:
     {
-      type: bool,
-      default_value: true,
-      description: "Use controller period for inference thread timing instead of system time",
+      type: double,
+      default_value: 500.0,
+      description: "Lowlevel loop frequency in Hz (mode 0 thread & mode 1 timer)",
+      validation: { bounds<>: [1.0, 2000.0] },
     }
-  use_period_for_lowlevel_timing:
+  inference_mode:
     {
-      type: bool,
-      default_value: true,
-      description: "Use controller period for lowlevel control thread timing instead of system time",
+      type: int,
+      default_value: 1,
+      description: "Inference scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline",
+      validation: { bounds<>: [0, 2] },
+    }
+  inference_timer_clock_type:
+    {
+      type: string,
+      default_value: "ROS_TIME",
+      description: "Clock type for inference timer: ROS_TIME, STEADY_TIME, SYSTEM_TIME",
+    }
+  lowlevel_mode:
+    {
+      type: int,
+      default_value: 1,
+      description: "Lowlevel scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline in run()",
+      validation: { bounds<>: [0, 2] },
+    }
+  lowlevel_timer_clock_type:
+    {
+      type: string,
+      default_value: "ROS_TIME",
+      description: "Clock type for lowlevel timer: ROS_TIME, STEADY_TIME, SYSTEM_TIME",
     }
   # sync_time_with_webots:
   #   {

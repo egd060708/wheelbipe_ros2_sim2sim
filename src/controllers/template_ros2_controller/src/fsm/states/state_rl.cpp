@@ -18,6 +18,8 @@
 #include "robot_state/robot_state.hpp"
 #include <algorithm>
 #include "utils/timeMarker.h"
+#include "rclcpp/create_timer.hpp"
+#include "rcl/time.h"
 
 namespace robot_locomotion
 {
@@ -94,54 +96,66 @@ void StateRL::enter(const RobotState& robot_state, const rclcpp::Time& time)
   this->stop_update_ = false;
   this->threadRunning = true;
   
-  // 根据配置选择使用 ROS2 定时器或独立线程
-  if (use_period_timing_ && node_) {
-    // // 使用 ROS2 定时器（period 会在 run() 中设置）
-    // // 如果 period 还未设置，等待 run() 调用
-    // if (period_microseconds_ > 0) {
-    //   ros_timer_ = node_->create_wall_timer(
-    //     std::chrono::microseconds(period_microseconds_),
-    //     std::bind(&StateRL::lowlevelCallback, this));
-    //   RCLCPP_INFO(logger_, "Lowlevel control started with ROS2 timer (period: %lld us)", period_microseconds_);
-    // } else {
-    //   RCLCPP_WARN(logger_, "Lowlevel control: ROS2 timer will be created after period is set");
-    // }
-  } else {
-    // 使用独立线程（系统时间）
-    if (this->thread_first_)
-    {
-      this->actuate_thread_ = std::thread(&StateRL::_Run_Lowlevel, this);
-      this->thread_first_ = false;
-    }
-    RCLCPP_INFO(logger_, "Lowlevel control started with system time thread");
+  // 根据模式选择调度方式
+  if (mode_ == 2) {
+    RCLCPP_INFO(logger_, "Lowlevel inline mode (no thread/timer)");
+    return;
   }
+
+  if (mode_ == 1) {
+    // 确保使用 lowlevel_period_us_ 设置 period_microseconds_
+    if (period_microseconds_ == 0 && lowlevel_period_us_ > 0) {
+      period_microseconds_ = lowlevel_period_us_;
+    }
+    if (node_ && period_microseconds_ > 0) {
+      auto clock = std::make_shared<rclcpp::Clock>(timer_clock_type_);
+      ros_timer_ = rclcpp::create_timer(
+        node_->get_node_base_interface(),
+        node_->get_node_timers_interface(),
+        clock,
+        rclcpp::Duration::from_nanoseconds(period_microseconds_ * 1000),
+        std::bind(&StateRL::onLowlevelTimer, this),
+        nullptr);
+      RCLCPP_INFO(logger_, "Lowlevel control started with ROS2 timer (mode=1, clock=%d, period=%lld us, freq=%.1f Hz)",
+                  static_cast<int>(timer_clock_type_), period_microseconds_, 1e6 / static_cast<double>(period_microseconds_));
+      return;
+    } else {
+      RCLCPP_WARN(logger_, "Lowlevel mode=1: period not set yet (period_us=%lld, lowlevel_period_us=%lld), will create timer after first run()",
+                  period_microseconds_, lowlevel_period_us_);
+      // 保持 mode_=1，等待 run() 中设置 period 后再创建定时器
+    }
+  }
+
+  // 默认：线程 + 系统时间
+  if (this->thread_first_)
+  {
+    this->actuate_thread_ = std::thread(&StateRL::lowlevelThreadLoop, this);
+    this->thread_first_ = false;
+  }
+  RCLCPP_INFO(logger_, "Lowlevel control started with system time thread (mode=0)");
 }
 
 void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcpp::Duration& period)
 {
-  static float last_enable_time = 0.;
-  // 更新 period（如果使用 period 进行频率计算）
-  // if (use_period_timing_) {
-  //   long long new_period_microseconds = period.nanoseconds() / 1000;
-  //   if (new_period_microseconds != period_microseconds_) {
-  //     period_microseconds_ = new_period_microseconds;
-  //     // 如果定时器还未创建，现在创建它
-  //     if (node_ && !ros_timer_ && period_microseconds_ > 0) {
-  //       ros_timer_ = node_->create_wall_timer(
-  //         std::chrono::microseconds(period_microseconds_),
-  //         std::bind(&StateRL::lowlevelCallback, this));
-  //       RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer created (period: %lld us)", period_microseconds_);
-  //     } else if (ros_timer_ && period_microseconds_ > 0) {
-  //       // 如果定时器已存在但 period 改变了，需要重新创建
-  //       ros_timer_->cancel();
-  //       ros_timer_ = node_->create_wall_timer(
-  //         std::chrono::microseconds(period_microseconds_),
-  //         std::bind(&StateRL::lowlevelCallback, this));
-  //       RCLCPP_INFO(logger_, "Lowlevel control ROS2 timer updated (period: %lld us)", period_microseconds_);
-  //     }
-  //   }
-  // }
-  
+  // 若模式为定时器且尚未创建定时器，则在首次 run 时创建
+  if (mode_ == 1 && node_) {
+    if (period_microseconds_ == 0) {
+      period_microseconds_ = (lowlevel_period_us_ > 0) ? lowlevel_period_us_ : (period.nanoseconds() / 1000);
+    }
+    if (period_microseconds_ > 0 && !ros_timer_) {
+      auto clock = std::make_shared<rclcpp::Clock>(timer_clock_type_);
+      ros_timer_ = rclcpp::create_timer(
+        node_->get_node_base_interface(),
+        node_->get_node_timers_interface(),
+        clock,
+        rclcpp::Duration::from_nanoseconds(period_microseconds_ * 1000),
+        std::bind(&StateRL::onLowlevelTimer, this),
+        nullptr);
+      RCLCPP_INFO(logger_, "Lowlevel timer (mode=1) created in run(), period: %lld us (freq=%.1f Hz)",
+                  period_microseconds_, 1e6 / static_cast<double>(period_microseconds_));
+    }
+  }
+
   // 更新线程安全的 robot_state 副本（供低层控制线程使用）
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
@@ -162,7 +176,7 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
 
   // 计算重力
   Vec3<double> projected_gravity = robot_state.body_state.rotation_w2b * Vec3<double>(0.0, 0.0, -1.);
-  // std::cout << projected_gravity << std::endl;
+
   // angVel
   for(const auto& angVel: robot_state.body_state.ang_vel_b) {
     model_input.push_back(static_cast<float>(angVel));
@@ -192,11 +206,7 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
     }
   }
 
-  // 添加指令
-  robot_state.command.cmd_vel[0] = 0.;
-  if (time.seconds()>10.){
-    robot_state.command.cmd_vel[0] = 0.5;
-  }
+  // 添加指令（此处不基于时间调整）
   for (const auto& cmd_vel : robot_state.command.cmd_vel) {
     model_input.push_back(static_cast<float>(cmd_vel));
   }
@@ -210,14 +220,6 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
 
   // 设置输入数据（触发推理）
   state_machine_->setRLInput(model_input);
-
-  if (use_period_timing_)
-  {
-    if (time.seconds()-last_enable_time>0.02){
-      state_machine_->rl_inference_->inferenceCallback();
-      last_enable_time = time.seconds();
-    }
-  }
 
   // 获取推理输出
   std::vector<float> model_output;
@@ -236,9 +238,9 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
     }
   }
 
-  if (use_period_timing_)
+  if(mode_ == 2)
   {
-    simplelowlevelCallbask(robot_state, time);
+    this->simplelowlevelCallbask(robot_state, time);
   }
 
   // 输出力矩（从线程安全的 torque 数组中读取）
@@ -286,20 +288,25 @@ void StateRL::exit(const RobotState& robot_state, const rclcpp::Time& time)
   this->threadRunning = false;
 }
 
-void StateRL::setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNode::SharedPtr node)
+void StateRL::setMode(int mode, rcl_clock_type_t clock_type, double freq_hz,
+                      rclcpp_lifecycle::LifecycleNode::SharedPtr node)
 {
-  use_period_timing_ = use_period;
+  mode_ = mode;
+  timer_clock_type_ = clock_type;
   node_ = node;
+  if (freq_hz > 0) {
+    lowlevel_period_us_ = static_cast<long long>(1e6 / freq_hz);
+    period_microseconds_ = lowlevel_period_us_;
+  }
 }
 
 void StateRL::simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time& time)
 {
   static float last_enable_time = 0;
-  if(time.seconds()-last_enable_time>0.005)
+  double period_s = (lowlevel_period_us_ > 0) ? (lowlevel_period_us_ / 1e6) : 0.005;
+  if(time.seconds()-last_enable_time>period_s)
   {
     for (int i=0; i < 6; i++){
-      // std::cout << "desired_pos[" << i << "] = " << this->desired_pos[i] << std::endl;
-      // std::cout << "current_pos[" << i << "] = " << robot_state.joints[i].position << std::endl;
       if (i < static_cast<int>(robot_state.joints.size())) {
         if(i<4){
           if(this->desired_pos[i]>3.14)
@@ -345,9 +352,9 @@ void StateRL::simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time
   }
 }
 
-void StateRL::lowlevelCallback()
+void StateRL::doLowlevelStep()
 {
-  // ROS2 定时器回调函数
+  // 公共的低层控制执行逻辑
   long long _start_time = getSystemTime();
   
   if (!this->stop_update_)
@@ -359,35 +366,31 @@ void StateRL::lowlevelCallback()
   // if (this->last_execution_time_ > 0)
   // {
   //   long long time_diff = _start_time - this->last_execution_time_;
-  //   RCLCPP_INFO(logger_, "_Run_Lowlevel execution interval: %lld us (%.3f ms)", 
+  //   RCLCPP_INFO(logger_, "Lowlevel execution interval: %lld us (%.3f ms)", 
   //               time_diff, time_diff / 1000.0);
   // }
   this->last_execution_time_ = _start_time;
 }
 
-void StateRL::_Run_Lowlevel()
+void StateRL::onLowlevelTimer()
 {
-  // 使用系统时间进行频率控制（默认 5ms）
+  // ROS2 定时器回调函数（模式1：定时器调度）
+  doLowlevelStep();
+}
+
+void StateRL::lowlevelThreadLoop()
+{
+  // 线程循环函数（模式0：独立线程调度，使用系统时间进行频率控制）
   while (this->threadRunning)
   {
     long long _start_time = getSystemTime();
+    
+    // 执行低层控制逻辑
+    doLowlevelStep();
 
-    if (!this->stop_update_)
-    {
-      this->actuate[this->dof_mode]();
-    }
-    
-    // 计算并打印两次执行之间的时间间隔
-    // if (this->last_execution_time_ > 0)
-    // {
-    //   long long time_diff = _start_time - this->last_execution_time_;
-    //   RCLCPP_INFO(logger_, "_Run_Lowlevel execution interval: %lld us (%.3f ms)", 
-    //               time_diff, time_diff / 1000.0);
-    // }
-    this->last_execution_time_ = _start_time;
-    
-    // 使用系统时间进行频率控制（默认 5ms）
-    absoluteWait(_start_time, (long long)(0.005 * 1000000));
+    // 使用系统时间进行频率控制（依据配置频率，默认 500Hz）
+    long long wait_us = (lowlevel_period_us_ > 0) ? lowlevel_period_us_ : (long long)(0.002 * 1000000);
+    absoluteWait(_start_time, wait_us);
   }
   this->threadRunning = false;
 }
@@ -405,19 +408,17 @@ void StateRL::_P_actuate()
   double local_torque[6] = {0};
   for (int i=0; i < 6; i++){
     if (i < static_cast<int>(robot_state.joints.size())) {
-      // std::cout << robot_state.joints[i].name << std::endl;
       this->pid_controllers[i].target = this->desired_pos[i];
-      // this->pid_controllers[i].target = 0;
       this->pid_controllers[i].current = robot_state.joints[i].position;
       this->pid_controllers[i].Adjust(0, robot_state.joints[i].velocity);
       local_torque[i] = this->pid_controllers[i].out;
       if(i>3){
         local_torque[i] += this->desired_pos[i];
-        if(local_torque[i]>4.99){
-          local_torque[i] = 4.99;
+        if(local_torque[i]>this->pid_controllers[i].Output_Max){
+          local_torque[i] = this->pid_controllers[i].Output_Max;
         }
-        if(local_torque[i]<-4.99){
-          local_torque[i] = -4.99;
+        if(local_torque[i]<this->pid_controllers[i].Output_Min){
+          local_torque[i] = this->pid_controllers[i].Output_Min;
         }
       }
     }

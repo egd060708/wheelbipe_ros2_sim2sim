@@ -24,6 +24,8 @@
 #include "fsm/states/state_emergency_stop.hpp"
 #include "tensorrt_cuda/tensorrt_inference.hpp"
 #include "robot_state/robot_state.hpp"
+#include "rclcpp/clock.hpp"
+#include "rcl/time.h"
 
 namespace robot_locomotion
 {
@@ -188,6 +190,14 @@ void StateMachine::initializeStates()
   states_[ControllerState::RUNNING] = std::make_unique<StateRunning>(this, logger_);
   states_[ControllerState::ERROR] = std::make_unique<StateError>(this, logger_);
   states_[ControllerState::EMERGENCY_STOP] = std::make_unique<StateEmergencyStop>(this, logger_);
+  
+  // 初始化后立即应用当前配置到 RL 状态
+  if (states_.find(ControllerState::RL) != states_.end()) {
+    StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
+    if (rl_state) {
+      rl_state->setMode(lowlevel_mode_, lowlevel_clock_type_, lowlevel_frequency_hz_, node_);
+    }
+  }
 }
 
 std::string StateMachine::getStateName(ControllerState state) const
@@ -254,8 +264,8 @@ bool StateMachine::initializeRLInference(const std::string& engine_model_path, i
     return false;
   }
 
-  // 设置时间源配置
-  rl_inference_->setUsePeriodTiming(use_period_for_inference_);
+  // 设置调度模式
+  rl_inference_->setMode(inference_mode_, inference_clock_type_, node_);
 
   RCLCPP_INFO(logger_, "RL inference initialized (not started yet)");
   return true;
@@ -310,21 +320,48 @@ bool StateMachine::getRLOutput(std::vector<float>& output_data)
   return false;
 }
 
-void StateMachine::setTimingConfig(bool use_period_for_inference, bool use_period_for_lowlevel)
+static rcl_clock_type_t parseClockType(const std::string& type_str)
 {
-  use_period_for_inference_ = use_period_for_inference;
-  use_period_for_lowlevel_ = use_period_for_lowlevel;
+  if (type_str == "ROS_TIME") {
+    return RCL_ROS_TIME;
+  } else if (type_str == "SYSTEM_TIME") {
+    return RCL_SYSTEM_TIME;
+  } else {  // 默认 STEADY
+    return RCL_STEADY_TIME;
+  }
+}
+
+void StateMachine::setTimingConfig(int inference_mode, int lowlevel_mode,
+                                   const std::string& inference_clock_type,
+                                   const std::string& lowlevel_clock_type)
+{
+  inference_mode_ = inference_mode;
+  lowlevel_mode_ = lowlevel_mode;
+  inference_clock_type_ = parseClockType(inference_clock_type);
+  lowlevel_clock_type_ = parseClockType(lowlevel_clock_type);
   
-  // 设置推理器的配置（传递节点指针用于创建定时器）
+  // 设置推理器的配置
   if (rl_inference_) {
-    rl_inference_->setUsePeriodTiming(use_period_for_inference, node_);
+    rl_inference_->setMode(inference_mode_, inference_clock_type_, node_);
   }
   
-  // 设置 RL 状态的配置（在 initializeStates 之后调用，传递节点指针）
+  // 设置 RL 状态的配置
   if (states_.find(ControllerState::RL) != states_.end()) {
     StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
     if (rl_state) {
-      rl_state->setUsePeriodTiming(use_period_for_lowlevel, node_);
+      rl_state->setMode(lowlevel_mode_, lowlevel_clock_type_, lowlevel_frequency_hz_, node_);
+    }
+  }
+}
+
+void StateMachine::setLowlevelFrequency(double freq_hz)
+{
+  lowlevel_frequency_hz_ = freq_hz;
+  // 如果 StateRL 已创建，立即更新
+  if (states_.find(ControllerState::RL) != states_.end()) {
+    StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
+    if (rl_state) {
+      rl_state->setMode(lowlevel_mode_, lowlevel_clock_type_, lowlevel_frequency_hz_, node_);
     }
   }
 }

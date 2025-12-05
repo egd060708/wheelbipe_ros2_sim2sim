@@ -22,7 +22,9 @@
 #include "controller_modules/PIDmethod.h"
 #include "robot_state/robot_state.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/clock.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rcl/time.h"
 
 namespace robot_locomotion
 {
@@ -85,21 +87,23 @@ public:
   void exit(const RobotState& robot_state, const rclcpp::Time& time) override;
   std::string getName() const override { return "RL"; }
   
-  // 设置是否使用 period 进行频率计算（需要传递节点指针用于创建定时器）
-  void setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNode::SharedPtr node = nullptr);
+  // 设置调度模式：0=线程(系统时间)，1=ROS2定时器，2=内联（run 内不执行底层）
+  void setMode(int mode, rcl_clock_type_t clock_type, double freq_hz = 0.0,
+               rclcpp_lifecycle::LifecycleNode::SharedPtr node = nullptr);
   
-  // 低层控制回调函数（用于定时器）
-  void lowlevelCallback();
+  // ROS2 定时器回调函数（模式1：定时器调度）
+  void onLowlevelTimer();
 
   // 简化底层策略
   void simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time& time);
-  
+
 private:
   std::array<float, 6> last_actions_ = {0};
   
   ModelParams params_;
   PIDmethod pid_controllers[6];
-  void _Run_Lowlevel();
+  void lowlevelThreadLoop();  // 线程循环函数（模式0：独立线程调度）
+  void doLowlevelStep();  // 公共的低层控制执行逻辑
   DofCtrlType dof_mode = P;
   using Dof_Actuate = std::function<void()>;  // 改用 std::function
   Dof_Actuate actuate[3];  // 存储可调用对象
@@ -121,13 +125,15 @@ private:
   // 用于记录上次执行时间（微秒）
   long long last_execution_time_ = 0;
   
-  // 是否使用 period 进行频率计算
-  bool use_period_timing_ = false;
+  // 调度模式与时钟
+  int mode_ = 0;
+  rcl_clock_type_t timer_clock_type_ = RCL_ROS_TIME;
   
-  // ROS2 定时器（当使用 ROS2 时间时）
+  // ROS2 定时器（当使用 ROS2 时间/其他时钟时）
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
   rclcpp::TimerBase::SharedPtr ros_timer_;
   long long period_microseconds_ = 0;
+  long long lowlevel_period_us_ = 2000;  // 默认 500Hz
 };
 
 }  // namespace robot_locomotion

@@ -16,6 +16,8 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include "rclcpp/create_timer.hpp"
+#include "rcl/time.h"
 
 #ifdef TENSORRT_AVAILABLE
 
@@ -61,7 +63,8 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
   , last_execution_time_{}
-  , use_period_timing_(false)
+  , mode_(0)
+  , timer_clock_type_(RCL_ROS_TIME)
   , node_(nullptr)
   , period_nanoseconds_(0)
 {
@@ -326,23 +329,37 @@ void TensorRTInference::start()
 
   running_ = true;
   
-  if (use_period_timing_ && node_) {
-    // // 使用 ROS2 定时器
-    // if (period_nanoseconds_ > 0) {
-    //   auto period_duration = rclcpp::Duration::from_nanoseconds(period_nanoseconds_);
-    //   ros_timer_ = node_->create_wall_timer(
-    //     std::chrono::nanoseconds(period_nanoseconds_),
-    //     std::bind(&TensorRTInference::inferenceCallback, this));
-    //   RCLCPP_INFO(logger_, "TensorRT inference started with ROS2 timer (period: %ld ns)", period_nanoseconds_);
-    // } else {
-    //   RCLCPP_ERROR(logger_, "Cannot start ROS2 timer: period not set");
-    //   running_ = false;
-    // }
-  } else {
-    // 使用独立线程（系统时间）
-    inference_thread_ = std::thread(&TensorRTInference::inferenceThread, this);
-    RCLCPP_INFO(logger_, "TensorRT inference thread started (system time)");
+  if (mode_ == 2) {
+    // 内联模式，不启动线程/定时器
+    RCLCPP_INFO(logger_, "TensorRT inference inline mode (no thread/timer)");
+    return;
   }
+
+  if (mode_ == 1) {
+    if (!node_) {
+      RCLCPP_WARN(logger_, "No node available, fallback to thread mode");
+      mode_ = 0;
+    } else if (period_nanoseconds_ > 0) {
+      auto clock = std::make_shared<rclcpp::Clock>(timer_clock_type_);
+      ros_timer_ = rclcpp::create_timer(
+        node_->get_node_base_interface(),
+        node_->get_node_timers_interface(),
+        clock,
+        rclcpp::Duration::from_nanoseconds(period_nanoseconds_),
+        std::bind(&TensorRTInference::inferenceCallback, this),
+        nullptr);
+      RCLCPP_INFO(logger_, "TensorRT inference started with ROS2 timer (mode=1, clock=%d, period=%ld ns)",
+                  static_cast<int>(timer_clock_type_), period_nanoseconds_);
+      return;
+    } else {
+      RCLCPP_WARN(logger_, "Period not set, fallback to thread mode");
+      mode_ = 0;
+    }
+  }
+
+  // 默认：线程+系统时间
+  inference_thread_ = std::thread(&TensorRTInference::inferenceThread, this);
+  RCLCPP_INFO(logger_, "TensorRT inference thread started (mode=0 system time)");
 }
 
 void TensorRTInference::stop()
@@ -374,7 +391,7 @@ void TensorRTInference::setInput(const std::vector<float>& input_data)
     return;
   }
 
-  std::lock_guard<std::mutex> lock(data_mutex_);
+  std::unique_lock<std::mutex> lock(data_mutex_);
   
   if (input_data.size() != input_data_.size()) {
     static rclcpp::Clock clock(RCL_ROS_TIME);
@@ -386,7 +403,14 @@ void TensorRTInference::setInput(const std::vector<float>& input_data)
   input_data_ = input_data;
   new_input_available_ = true;
   input_ready_ = true;
-  data_ready_cv_.notify_one();
+
+  if (mode_ == 2) {
+    // 内联执行推理
+    lock.unlock();
+    inferenceCallback();
+  } else {
+    data_ready_cv_.notify_one();
+  }
 }
 
 bool TensorRTInference::getOutput(std::vector<float>& output_data)
@@ -405,9 +429,11 @@ bool TensorRTInference::getOutput(std::vector<float>& output_data)
   return false;
 }
 
-void TensorRTInference::setUsePeriodTiming(bool use_period, rclcpp_lifecycle::LifecycleNode::SharedPtr node)
+void TensorRTInference::setMode(int mode, rcl_clock_type_t clock_type,
+                                rclcpp_lifecycle::LifecycleNode::SharedPtr node)
 {
-  use_period_timing_ = use_period;
+  mode_ = mode;
+  timer_clock_type_ = clock_type;
   node_ = node;
 }
 
@@ -572,7 +598,8 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , new_input_available_(false)
   , cuda_stream_(nullptr)
   , last_execution_time_{}
-  , use_period_timing_(false)
+  , mode_(0)
+  , timer_clock_type_(RCL_ROS_TIME)
   , node_(nullptr)
   , period_nanoseconds_(0)
 {
