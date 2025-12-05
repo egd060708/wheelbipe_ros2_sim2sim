@@ -37,12 +37,7 @@ enum class ControllerState
 {
   INIT = 0,           // 初始化状态
   IDLE,               // 空闲状态
-  RL,                 // 强化学习状态
-  STANDING,           // 站立状态
-  WALKING,            // 行走状态
-  RUNNING,            // 跑步状态
-  ERROR,              // 错误状态
-  EMERGENCY_STOP      // 紧急停止状态
+  RL                  // 强化学习状态
 };
 
 // 状态机类
@@ -100,6 +95,15 @@ public:
                        const std::string& inference_clock_type,
                        const std::string& lowlevel_clock_type);
   void setLowlevelFrequency(double freq_hz);
+  
+  // 设置关节参数（传递给RL状态）
+  void setJointParams(const std::vector<double>& stiffness,
+                      const std::vector<double>& damping,
+                      const std::vector<double>& action_scale,
+                      const std::vector<double>& output_max,
+                      const std::vector<double>& output_min,
+                      const std::vector<double>& bias,
+                      const std::vector<double>& default_dof_pos);
 
   // TensorRT 推理器（用于 RL 状态）
   std::unique_ptr<TensorRTInference> rl_inference_;

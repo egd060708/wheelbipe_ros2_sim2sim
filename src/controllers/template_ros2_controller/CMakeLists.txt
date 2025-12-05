@@ -51,11 +51,6 @@ set(FSM_FILES
   src/fsm/states/state_init.cpp
   src/fsm/states/state_idle.cpp
   src/fsm/states/state_rl.cpp
-  src/fsm/states/state_standing.cpp
-  src/fsm/states/state_walking.cpp
-  src/fsm/states/state_running.cpp
-  src/fsm/states/state_error.cpp
-  src/fsm/states/state_emergency_stop.cpp
 )
 
 set(TENSORRT_CUDA_FILES

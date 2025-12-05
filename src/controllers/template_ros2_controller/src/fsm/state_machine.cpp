@@ -17,11 +17,6 @@
 #include "fsm/states/state_init.hpp"
 #include "fsm/states/state_idle.hpp"
 #include "fsm/states/state_rl.hpp"
-#include "fsm/states/state_standing.hpp"
-#include "fsm/states/state_walking.hpp"
-#include "fsm/states/state_running.hpp"
-#include "fsm/states/state_error.hpp"
-#include "fsm/states/state_emergency_stop.hpp"
 #include "tensorrt_cuda/tensorrt_inference.hpp"
 #include "robot_state/robot_state.hpp"
 #include "rclcpp/clock.hpp"
@@ -121,25 +116,6 @@ ControllerState StateMachine::handleStateTransition(const RobotState& robot_stat
         next_state = target_state_;
       }
       break;
-
-    case ControllerState::STANDING:
-    case ControllerState::WALKING:
-    case ControllerState::RUNNING:
-      // 如果目标状态改变，可以转换
-      if (target_state_ != current_state_ && target_state_ != ControllerState::INIT) {
-        next_state = target_state_;
-      }
-      // 错误检测：如果检测到异常，进入错误状态
-      // 这里可以添加错误检测逻辑
-      break;
-
-    case ControllerState::ERROR:
-      // 错误状态需要手动重置
-      break;
-
-    case ControllerState::EMERGENCY_STOP:
-      // 紧急停止状态需要手动重置
-      break;
   }
 
   return next_state;
@@ -185,11 +161,6 @@ void StateMachine::initializeStates()
   states_[ControllerState::INIT] = std::make_unique<StateInit>(this, logger_);
   states_[ControllerState::IDLE] = std::make_unique<StateIdle>(this, logger_);
   states_[ControllerState::RL] = std::make_unique<StateRL>(this, logger_);
-  states_[ControllerState::STANDING] = std::make_unique<StateStanding>(this, logger_);
-  states_[ControllerState::WALKING] = std::make_unique<StateWalking>(this, logger_);
-  states_[ControllerState::RUNNING] = std::make_unique<StateRunning>(this, logger_);
-  states_[ControllerState::ERROR] = std::make_unique<StateError>(this, logger_);
-  states_[ControllerState::EMERGENCY_STOP] = std::make_unique<StateEmergencyStop>(this, logger_);
   
   // 初始化后立即应用当前配置到 RL 状态
   if (states_.find(ControllerState::RL) != states_.end()) {
@@ -206,11 +177,6 @@ std::string StateMachine::getStateName(ControllerState state) const
     case ControllerState::INIT: return "INIT";
     case ControllerState::IDLE: return "IDLE";
     case ControllerState::RL: return "RL";
-    case ControllerState::STANDING: return "STANDING";
-    case ControllerState::WALKING: return "WALKING";
-    case ControllerState::RUNNING: return "RUNNING";
-    case ControllerState::ERROR: return "ERROR";
-    case ControllerState::EMERGENCY_STOP: return "EMERGENCY_STOP";
     default: return "UNKNOWN";
   }
 }
@@ -232,7 +198,7 @@ std::string StateMachine::getStateName() const
 
 void StateMachine::setTargetState(ControllerState target_state)
 {
-  if (target_state != ControllerState::INIT && target_state != ControllerState::ERROR) {
+  if (target_state != ControllerState::INIT) {
     target_state_ = target_state;
   }
 }
@@ -362,6 +328,23 @@ void StateMachine::setLowlevelFrequency(double freq_hz)
     StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
     if (rl_state) {
       rl_state->setMode(lowlevel_mode_, lowlevel_clock_type_, lowlevel_frequency_hz_, node_);
+    }
+  }
+}
+
+void StateMachine::setJointParams(const std::vector<double>& stiffness,
+                                   const std::vector<double>& damping,
+                                   const std::vector<double>& action_scale,
+                                   const std::vector<double>& output_max,
+                                   const std::vector<double>& output_min,
+                                   const std::vector<double>& bias,
+                                   const std::vector<double>& default_dof_pos)
+{
+  // 传递给 RL 状态
+  if (states_.find(ControllerState::RL) != states_.end()) {
+    StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
+    if (rl_state) {
+      rl_state->setJointParams(stiffness, damping, action_scale, output_max, output_min, bias, default_dof_pos);
     }
   }
 }

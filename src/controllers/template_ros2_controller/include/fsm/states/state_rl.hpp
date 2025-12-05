@@ -31,32 +31,22 @@ namespace robot_locomotion
 
 struct ModelParams
 {
-    float joint_damping;
-    float joint_stiffness;
-    float wheel_damping;
-    float wheel_stiffness;
-    float joint_action_scale;
-    float wheel_action_scale;
+    // 每个关节的参数（最多支持8个关节）
+    float joint_stiffness[8] = {0};
+    float joint_damping[8] = {0};
+    float joint_action_scale[8] = {0};
+    float joint_output_max[8] = {0};
+    float joint_output_min[8] = {0};
+    float joint_bias[8] = {0};  // 偏置输出力矩
+    float default_dof_pos[8] = {0};
+    
+    // 其他参数
     float ang_vel_scale;
     float dof_pos_scale;
     float dof_vel_scale;
     float cmd_scale;
     float height_scale;
-    float default_dof_pos[6] = {0};
-    float spring_force;
 };
-
-// // 观测数据维度
-// struct Observations
-// {          
-//     float ang_vel[3];  
-//     float gravity_vec[3];
-//     float dof_pos[6];         
-//     float dof_vel[6];  
-//     float commands[3];        
-//     float height_cmd;
-//     float last_actions[6];
-// };
 
 enum DofCtrlType
 {
@@ -64,16 +54,6 @@ enum DofCtrlType
   V,
   T
 };
-// // 电机执行维度
-// struct DofCtrl
-// {
-//   DofCtrlType dof_mode = P;
-//   float P_p[6];
-//   float P_d[6];
-//   float V_p[6];
-//   float V_d[6];
-//   float T_d[6];
-// };
 
 // 强化学习状态类
 class StateRL : public StateBase
@@ -91,6 +71,15 @@ public:
   void setMode(int mode, rcl_clock_type_t clock_type, double freq_hz = 0.0,
                rclcpp_lifecycle::LifecycleNode::SharedPtr node = nullptr);
   
+  // 设置关节参数（从YAML配置）
+  void setJointParams(const std::vector<double>& stiffness, 
+                      const std::vector<double>& damping,
+                      const std::vector<double>& action_scale,
+                      const std::vector<double>& output_max,
+                      const std::vector<double>& output_min,
+                      const std::vector<double>& bias,
+                      const std::vector<double>& default_dof_pos);
+  
   // ROS2 定时器回调函数（模式1：定时器调度）
   void onLowlevelTimer();
 
@@ -101,7 +90,7 @@ private:
   std::array<float, 6> last_actions_ = {0};
   
   ModelParams params_;
-  PIDmethod pid_controllers[6];
+  PIDmethod pid_controllers[8];
   void lowlevelThreadLoop();  // 线程循环函数（模式0：独立线程调度）
   void doLowlevelStep();  // 公共的低层控制执行逻辑
   DofCtrlType dof_mode = P;
@@ -115,8 +104,8 @@ private:
   bool stop_update_ = false;
   bool thread_first_ = true;
 
-  double desired_pos[6] = {0};
-  double torque[6] = {0};
+  double desired_pos[8] = {0};
+  double torque[8] = {0};
 
   // 线程安全的 robot_state 副本（用于低层控制线程）
   RobotState robot_state_copy_;

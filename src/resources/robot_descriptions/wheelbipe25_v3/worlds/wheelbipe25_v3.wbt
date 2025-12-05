@@ -63,6 +63,7 @@ Robot {
       jointParameters HingeJointParameters {
         axis 0 1 0
         anchor 0 -0.1815 0
+        dampingConstant 0.01
       }
       device [
         RotationalMotor {
@@ -94,6 +95,7 @@ Robot {
               anchor -0.215 -0.018 0
               minStop -0.05
               maxStop 1.05
+              dampingConstant 0.01
             }
             endPoint DEF right_rear2_link Solid {
               translation -0.215 -0.018 0
@@ -111,6 +113,7 @@ Robot {
                   jointParameters HingeJointParameters {
                     axis 0 1 0
                     anchor 0.20521 0 -0.14968
+                    dampingConstant 0.01
                   }
                   device [
                     RotationalMotor {
@@ -201,6 +204,7 @@ Robot {
             jointParameters HingeJointParameters {
               axis 0 1 0
               anchor -0.016246 0.0015 -0.044635
+              dampingConstant 0.01
             }
             endPoint DEF right_spring1_link Solid {
               translation -0.016246 0.0015 -0.044635
@@ -236,6 +240,7 @@ Robot {
                       DEF right_s2r2 HingeJoint {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
+                          dampingConstant 0.01
                         }
                         endPoint SolidReference {
                           solidName "right_rear2_link"
@@ -298,6 +303,7 @@ Robot {
       jointParameters HingeJointParameters {
         axis 0 1 0
         anchor 0 -0.1815 0
+        dampingConstant 0.01
       }
       device [
         RotationalMotor {
@@ -327,6 +333,7 @@ Robot {
             jointParameters HingeJointParameters {
               axis 0 1 0
               anchor 0.099148 -0.001 -0.013023
+              dampingConstant 0.01
             }
             endPoint DEF right_front2_link Solid {
               translation 0.099148 -0.001 -0.013023
@@ -344,6 +351,7 @@ Robot {
                   jointParameters HingeJointParameters {
                     axis 0 1 0
                     anchor -0.1037 -0.0035 -0.056595
+                    dampingConstant 0.01
                   }
                   endPoint DEF right_front3_link Solid {
                     translation -0.1037 -0.0035 -0.056595
@@ -353,6 +361,7 @@ Robot {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
                           anchor -0.09545 0 0.06962
+                          dampingConstant 0.01
                         }
                         endPoint SolidReference {
                           solidName "right_rear1_link"
@@ -370,6 +379,7 @@ Robot {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
                           anchor -0.12891 0.0025 0.11942
+                          dampingConstant 0.01
                         }
                         endPoint DEF right_front4_link Solid {
                           translation -0.12891 0.0025 0.11942
@@ -379,6 +389,7 @@ Robot {
                               jointParameters HingeJointParameters {
                                 axis 0 1 0
                                 anchor -0.115 0 0
+                                dampingConstant 0.01
                               }
                               endPoint SolidReference {
                                 solidName "right_rear2_link"
@@ -456,6 +467,7 @@ Robot {
       jointParameters HingeJointParameters {
         axis 0 1 0
         anchor 0 0.1815 0
+        dampingConstant 0.01
       }
       device [
         RotationalMotor {
@@ -487,6 +499,7 @@ Robot {
               anchor -0.21499 0.018 0.002019
               minStop -0.05
               maxStop 1.05
+              dampingConstant 0.01
             }
             endPoint DEF left_rear2_link Solid {
               translation -0.21499 0.018 0.002019
@@ -504,6 +517,7 @@ Robot {
                   jointParameters HingeJointParameters {
                     axis 0 1 0
                     anchor 0.2038 0 -0.1516
+                    dampingConstant 0.01
                   }
                   device [
                     RotationalMotor {
@@ -594,6 +608,7 @@ Robot {
             jointParameters HingeJointParameters {
               axis 0 1 0
               anchor -0.016664 -0.0015 -0.044481
+              dampingConstant 0.01
             }
             endPoint DEF left_spring1_link Solid {
               translation -0.016664 -0.0015 -0.044481
@@ -630,6 +645,7 @@ Robot {
                       DEF left_s2r2 HingeJoint {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
+                          dampingConstant 0.01
                         }
                         endPoint SolidReference {
                           solidName "left_rear2_link"
@@ -692,6 +708,7 @@ Robot {
       jointParameters HingeJointParameters {
         axis 0 1 0
         anchor 0 0.1815 0
+        dampingConstant 0.01
       }
       device [
         RotationalMotor {
@@ -721,6 +738,7 @@ Robot {
             jointParameters HingeJointParameters {
               axis 0 1 0
               anchor 0.099022 0.001 -0.013954
+              dampingConstant 0.01
             }
             endPoint DEF left_front2_link Solid {
               translation 0.099022 0.001 -0.013954
@@ -738,6 +756,7 @@ Robot {
                   jointParameters HingeJointParameters {
                     axis 0 1 0
                     anchor -0.10423 0.0035 -0.055619
+                    dampingConstant 0.01
                   }
                   endPoint DEF left_front3_link Solid {
                     translation -0.10423 0.0035 -0.055619
@@ -747,6 +766,7 @@ Robot {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
                           anchor -0.09545 0 0.06962
+                          dampingConstant 0.01
                         }
                         endPoint SolidReference {
                           solidName "left_rear1_link"
@@ -764,6 +784,7 @@ Robot {
                         jointParameters HingeJointParameters {
                           axis 0 1 0
                           anchor -0.12778 -0.0025 0.12063
+                          dampingConstant 0.01
                         }
                         endPoint DEF left_front4_link Solid {
                           translation -0.12778 -0.0025 0.12063
@@ -773,6 +794,7 @@ Robot {
                               jointParameters HingeJointParameters {
                                 axis 0 1 0
                                 anchor -0.115 0 0
+                                dampingConstant 0.01
                               }
                               endPoint SolidReference {
                                 solidName "left_rear2_link"
@@ -855,7 +877,7 @@ Robot {
   boundingObject Group {
     children [
       Pose {
-        translation 0 0 0.07
+        translation 0 0 0.075
         children [
           Box {
             size 0.275 0.275 0.43
@@ -863,7 +885,7 @@ Robot {
         ]
       }
       Pose {
-        translation 0 0 -0.04
+        translation 0 0 -0.035
         children [
           Box {
             size 0.54 0.3 0.16
