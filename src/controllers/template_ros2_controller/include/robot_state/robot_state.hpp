@@ -50,6 +50,7 @@ struct GeneralizedState
   Quat<double> orientation_b;
   Vec3<double> rpy;
   RotMat<double> rotation_b2w;// 机身系转到世界系的旋转矩阵
+  RotMat<double> rotation_w2b;// 世界系转到机身系的旋转矩阵
 };
 
 // 指令

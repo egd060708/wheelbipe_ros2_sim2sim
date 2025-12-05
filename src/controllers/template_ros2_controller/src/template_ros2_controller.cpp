@@ -211,10 +211,10 @@ void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rc
   robot_state_.imu.angular_velocity[1] = gyro[1];
   robot_state_.imu.angular_velocity[2] = gyro[2];
   
-  robot_state_.imu.orientation[0] = quat[0];
-  robot_state_.imu.orientation[1] = quat[1];
-  robot_state_.imu.orientation[2] = quat[2];
-  robot_state_.imu.orientation[3] = quat[3];
+  robot_state_.imu.orientation[0] = quat[3];
+  robot_state_.imu.orientation[1] = quat[0];
+  robot_state_.imu.orientation[2] = quat[1];
+  robot_state_.imu.orientation[3] = quat[2];
 
   // 更新时间信息
   robot_state_.timestamp = time.seconds();

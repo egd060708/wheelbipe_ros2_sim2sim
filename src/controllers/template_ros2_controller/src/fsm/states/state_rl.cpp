@@ -26,9 +26,9 @@ StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
   : StateBase(state_machine, logger)
 {
   // 初始化参数
-  this->params_.joint_damping = -0.5f;
-  this->params_.joint_stiffness = 30.f;
-  this->params_.wheel_damping = -0.01f;
+  this->params_.joint_damping = -1.0f;
+  this->params_.joint_stiffness = 40.f;
+  this->params_.wheel_damping = -0.0f;
   this->params_.wheel_stiffness = 0.f;
   this->params_.joint_action_scale = 0.5f;
   this->params_.wheel_action_scale = 1.0f;
@@ -51,13 +51,22 @@ StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
 
   for(int i=0;i<6;i++)
   {
+    if(i<2){
+      this->pid_controllers[i].getMicroTick_regist(getSystemTime);
+      this->pid_controllers[i].PID_Init(Common, 0);
+      this->pid_controllers[i].Params_Config(PID_Mode::IS_PD,
+                                              40.,
+                                              -1.,
+                                              1e6,99.9,-99.9);
+      this->pid_controllers[i].d_of_current = true;
+    }
     if(i<4){
       this->pid_controllers[i].getMicroTick_regist(getSystemTime);
       this->pid_controllers[i].PID_Init(Common, 0);
       this->pid_controllers[i].Params_Config(PID_Mode::IS_PD,
-                                              params_.joint_stiffness,
-                                              params_.joint_damping,
-                                              1e6,39.9,-39.9);
+                                              60.,
+                                              -1.5,
+                                              1e6,99.9,-99.9);
       this->pid_controllers[i].d_of_current = true;
     }
     else{
@@ -66,7 +75,7 @@ StateRL::StateRL(StateMachine* state_machine, rclcpp::Logger logger)
       this->pid_controllers[i].Params_Config(PID_Mode::IS_PD,
                                               params_.wheel_stiffness,
                                               params_.wheel_damping,
-                                              1e6,4.99,-4.99);
+                                              1e6,9.99,-9.99);
       this->pid_controllers[i].d_of_current = true;
     }
   }
@@ -152,8 +161,8 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
   std::vector<float> model_input;
 
   // 计算重力
-  Vec3<double> projected_gravity = robot_state.body_state.rotation_b2w * Vec3<double>(0.0, 0.0, -1.);
-  
+  Vec3<double> projected_gravity = robot_state.body_state.rotation_w2b * Vec3<double>(0.0, 0.0, -1.);
+  // std::cout << projected_gravity << std::endl;
   // angVel
   for(const auto& angVel: robot_state.body_state.ang_vel_b) {
     model_input.push_back(static_cast<float>(angVel));
@@ -167,7 +176,12 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
   // 添加关节位置
   for (const auto& joint : robot_state.joints) {
     if (joint.name.find("spring") == std::string::npos){
-      model_input.push_back(static_cast<float>(joint.position));
+      // if (joint.name.find("wheel") == std::string::npos){
+        model_input.push_back(static_cast<float>(joint.position));
+      // }
+      // else{
+      //   model_input.push_back(0.f);
+      // }
     }
   }
   
@@ -179,7 +193,10 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
   }
 
   // 添加指令
-  robot_state.command.cmd_vel[0] = 2;
+  robot_state.command.cmd_vel[0] = 0.;
+  if (time.seconds()>10.){
+    robot_state.command.cmd_vel[0] = 0.5;
+  }
   for (const auto& cmd_vel : robot_state.command.cmd_vel) {
     model_input.push_back(static_cast<float>(cmd_vel));
   }
@@ -210,7 +227,7 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
     
     for (size_t i = 0; i < output_size; ++i) {
       if(i<4){
-        // this->desired_pos[i] = this->params_.joint_action_scale*static_cast<double>(model_output[i])+this->params_.default_dof_pos[i];
+        this->desired_pos[i] = this->params_.joint_action_scale*static_cast<double>(model_output[i])+this->params_.default_dof_pos[i];
       }
       else{
         this->desired_pos[i] = this->params_.wheel_action_scale*static_cast<double>(model_output[i]);
@@ -232,9 +249,9 @@ void StateRL::run(RobotState& robot_state, const rclcpp::Time& time, const rclcp
       if(i<6){
         robot_state.joints[i].output_torque = this->torque[i];
       }
-      else{
-        robot_state.joints[i].output_torque = this->params_.spring_force;
-      }
+      // else{
+      //   robot_state.joints[i].output_torque = this->params_.spring_force;
+      // }
     }
   }
   // long long _start_time = getSystemTime();
@@ -281,6 +298,8 @@ void StateRL::simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time
   if(time.seconds()-last_enable_time>0.005)
   {
     for (int i=0; i < 6; i++){
+      // std::cout << "desired_pos[" << i << "] = " << this->desired_pos[i] << std::endl;
+      // std::cout << "current_pos[" << i << "] = " << robot_state.joints[i].position << std::endl;
       if (i < static_cast<int>(robot_state.joints.size())) {
         if(i<4){
           if(this->desired_pos[i]>3.14)
@@ -291,27 +310,33 @@ void StateRL::simplelowlevelCallbask(RobotState& robot_state, const rclcpp::Time
           {
             this->desired_pos[i]=-3.14;
           }
-          this->torque[i] = this->params_.joint_stiffness*(this->desired_pos[i]-robot_state.joints[i].position)
-                            + this->params_.joint_damping*robot_state.joints[i].velocity;
+          if(i<2){
+            this->torque[i] = 40.*(this->desired_pos[i]-robot_state.joints[i].position)
+                              - 1.*robot_state.joints[i].velocity;
+          }
+          else{
+            this->torque[i] = 60.*(this->desired_pos[i]-robot_state.joints[i].position)
+                              - 1.5*robot_state.joints[i].velocity;
+          }
         }
         else{
           this->torque[i] = this->desired_pos[i] + this->params_.wheel_damping*robot_state.joints[i].velocity;
         }
         if(i<4){
-          if(this->torque[i]>39.9){
-            this->torque[i] = 39.9;
+          if(this->torque[i]>99.9){
+            this->torque[i] = 99.9;
           }
-          if(this->torque[i]<-39.9){
-            this->torque[i] = -39.9;
+          if(this->torque[i]<-99.9){
+            this->torque[i] = -99.9;
           }
         }
         else
         {
-          if(this->torque[i]>4.99){
-            this->torque[i] = 4.99;
+          if(this->torque[i]>9.99){
+            this->torque[i] = 9.99;
           }
-          if(this->torque[i]<-4.99){
-            this->torque[i] = -4.99;
+          if(this->torque[i]<-9.99){
+            this->torque[i] = -9.99;
           }
         }
       }

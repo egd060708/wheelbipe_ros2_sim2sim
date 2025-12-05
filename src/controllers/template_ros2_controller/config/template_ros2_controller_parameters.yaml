@@ -17,7 +17,8 @@ template_ros2_controller:
     {
       type: string,
       # default_value: "/home/lu/Git_Project/github/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_rough_direct/2025-11-23_23-53-18/exported/model_gn.engine",
-      default_value: "/home/lu/Git_Project/github/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_direct/2025-11-20_13-06-13/exported/model_gn.engine",
+      # default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_serial_direct/2025-12-04_20-37-08/exported/policy.engine",
+      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_serial_direct/2025-12-03_13-23-21/exported/model_gn.engine",
       description: "Path to TensorRT engine model file for reinforcement learning inference",
     }
   rl_inference_frequency:

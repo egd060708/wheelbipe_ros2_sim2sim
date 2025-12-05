@@ -97,4 +97,36 @@ namespace template_webots_ros2_ctrl
         std::vector<Joint> mJoints;
         InertiaUnit mImu;
     };
+
+    // 通用角度归一化函数
+    double normalize_angle(double angle, double mod_value) {
+        // mod_value: 模数（2π, 4π等）
+        double half_mod = mod_value / 2.0;
+        
+        // 取模
+        angle = std::fmod(angle, mod_value);
+        
+        // 映射到[-half_mod, half_mod]
+        if (angle > half_mod) {
+            angle -= mod_value;
+        } else if (angle < -half_mod) {
+            angle += mod_value;
+        }
+        
+        return angle;
+    }
+
+    // 通用角度差计算
+    double angle_difference(double angle1, double angle2, double mod_value) {
+        double diff = angle1 - angle2;
+        double half_mod = mod_value / 2.0;
+        
+        if (diff > half_mod) {
+            diff -= mod_value;
+        } else if (diff < -half_mod) {
+            diff += mod_value;
+        }
+        
+        return diff;
+    }
 }

@@ -17,7 +17,7 @@ elseif($ENV{ROS_VERSION} EQUAL 2)
 
   find_package(ament_cmake REQUIRED)
 
-  install(DIRECTORY launch wheelbipe25_v3 DESTINATION share/${PROJECT_NAME})
+  install(DIRECTORY launch wheelbipe25_v3 wheelbipe25_v3_serial DESTINATION share/${PROJECT_NAME})
 
   ament_package()
 endif()

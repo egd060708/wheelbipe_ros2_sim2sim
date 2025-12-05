@@ -94,11 +94,8 @@ export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH   # 包含 lib
 
    ```bash
    source install/setup.bash
-   ros2 launch webots_bridge webots_bridge.launch.py \
-     prefix:=wheelbipe25_v3 \
-     urdf:=robot.xacro \
-     ctrl_mode:=wbc \
-     yaml_path:=webots_bridge
+   ros2 launch template_middleware template_bring_up.launch.py \
+     prefix:=wheelbipe25_v3
    ```
 
    参数说明：

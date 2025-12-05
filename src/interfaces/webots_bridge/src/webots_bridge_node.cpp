@@ -174,16 +174,18 @@ namespace template_webots_ros2_ctrl
         for (Joint & joint : mJoints) {
             if (joint.sensor) {
             const double position = wb_position_sensor_get_value(joint.sensor);
-            auto sin = std::sin(position);
-            auto cos = std::cos(position);
-            double position_modify = std::atan2(sin, cos);
-            double velocity;
-            if (std::abs(position_modify - joint.position) > M_PI) {
-                auto sign = position_modify > joint.position ? 1 : -1;
-                velocity = (position_modify - 2 * M_PI * sign - joint.position) / deltaTime;
-            } else {
-                velocity = (position_modify - joint.position) / deltaTime;
-            }
+            // auto sin = std::sin(position);
+            // auto cos = std::cos(position);
+            // double position_modify = std::atan2(sin, cos);
+            // double velocity;
+            // if (std::abs(position_modify - joint.position) > M_PI) {
+            //     auto sign = position_modify > joint.position ? 1 : -1;
+            //     velocity = (position_modify - 2 * M_PI * sign - joint.position) / deltaTime;
+            // } else {
+            //     velocity = (position_modify - joint.position) / deltaTime;
+            // }
+            double position_modify = normalize_angle(position, 2 * M_PI);
+            double velocity = angle_difference(position_modify, joint.position, 2 * M_PI) / deltaTime;
         
             if (!std::isnan(joint.velocity)) {
                 joint.acceleration = static_cast<tFloat>((joint.velocity - velocity) / deltaTime);
