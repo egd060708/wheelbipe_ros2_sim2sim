@@ -5,14 +5,6 @@ template_ros2_controller:
       default_value: 500,
       description: "Main control loop update rate in Hz",
     }
-  joints:
-    {
-      type: string_array,
-      default_value: [],
-      description: "Joint names to control and listen to",
-      read_only: true,
-      validation: { unique<>: null },
-    }
   rl_model_path:
     {
       type: string,
@@ -37,7 +29,7 @@ template_ros2_controller:
   inference_mode:
     {
       type: int,
-      default_value: 1,
+      default_value: 0,
       description: "Inference scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline",
       validation: { bounds<>: [0, 2] },
     }
@@ -50,7 +42,7 @@ template_ros2_controller:
   lowlevel_mode:
     {
       type: int,
-      default_value: 1,
+      default_value: 0,
       description: "Lowlevel scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline in run()",
       validation: { bounds<>: [0, 2] },
     }
