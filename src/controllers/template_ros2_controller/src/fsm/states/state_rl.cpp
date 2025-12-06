@@ -48,7 +48,7 @@ StateRL::StateRL(StateMachine *state_machine, rclcpp::Logger logger)
   this->params_.dof_vel_scale = 1.0f;
   this->params_.cmd_scale = 1.0f;
   this->params_.height_scale = 1.0f;
-
+  
   // 使用 Lambda 捕获 this 指针
   this->actuate[DofCtrlType::P] = [this]() { this->_P_actuate(); };
   this->actuate[DofCtrlType::V] = [this]() { this->_V_actuate(); };
@@ -58,14 +58,14 @@ StateRL::StateRL(StateMachine *state_machine, rclcpp::Logger logger)
 
   // 初始化PID控制器（使用数组参数）
   for (int i = 0; i < 8; i++) {
-    this->pid_controllers[i].getMicroTick_regist(getSystemTime);
-    this->pid_controllers[i].PID_Init(Common, 0);
+      this->pid_controllers[i].getMicroTick_regist(getSystemTime);
+      this->pid_controllers[i].PID_Init(Common, 0);
 
     // 使用配置的stiffness、damping和输出限制
     this->pid_controllers[i].Params_Config(
         PID_Mode::IS_PD, params_.joint_stiffness[i], params_.joint_damping[i],
         1e6, params_.joint_output_max[i], params_.joint_output_min[i]);
-    this->pid_controllers[i].d_of_current = true;
+      this->pid_controllers[i].d_of_current = true;
   }
 }
 
@@ -147,13 +147,13 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
                   1e6 / static_cast<double>(period_microseconds_));
     }
   }
-
+  
   // 更新线程安全的 robot_state 副本（供低层控制线程使用）
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
     robot_state_copy_ = robot_state;
   }
-
+  
   // 如果推理器未初始化，使用默认值
   if (!state_machine_ || !state_machine_->isRLInferenceInitialized()) {
     // 默认行为：所有力矩设为0
@@ -169,7 +169,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
   // 计算重力
   Vec3<double> projected_gravity =
       robot_state.body_state.rotation_w2b * Vec3<double>(0.0, 0.0, -1.);
-
+  
   // angVel
   for (const auto &angVel : robot_state.body_state.ang_vel_b) {
     model_input.push_back(static_cast<float>(angVel));
@@ -191,7 +191,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
       // }
     }
   }
-
+  
   // 添加关节速度
   for (const auto &joint : robot_state.joints) {
     if (joint.name.find("spring") == std::string::npos) {
@@ -205,7 +205,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
   }
   // 使用从话题订阅获取的高度指令（不再硬编码）
   model_input.push_back(static_cast<float>(robot_state.command.cmd_height));
-
+  
   // 添加上一次的模型输出
   for (const auto &la : this->last_actions_) {
     model_input.push_back(la);
@@ -220,7 +220,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     // 将模型输出转换为关节力矩
     size_t output_size =
         std::min(model_output.size(), robot_state.joints.size());
-
+    
     for (size_t i = 0; i < output_size; ++i) {
       this->desired_pos[i] = this->params_.joint_action_scale[i] *
                                  static_cast<double>(model_output[i]) +
@@ -238,7 +238,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
     for (int i = 0; i < 8; i++) {
       robot_state.joints[i].output_torque = this->torque[i] + this->params_.joint_bias[i];
-    }
+      }
   }
   // long long _start_time = getSystemTime();
   // // 计算并打印两次执行之间的时间间隔
@@ -397,7 +397,7 @@ void StateRL::_P_actuate() {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
     robot_state = robot_state_copy_;
   }
-
+  
   // 计算 PID 输出
   double local_torque[6] = {0};
   for (int i = 0; i < 6; i++) {
@@ -418,7 +418,7 @@ void StateRL::_P_actuate() {
       }
     }
   }
-
+  
   // 线程安全地更新 torque 数组
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
@@ -435,7 +435,7 @@ void StateRL::_V_actuate() {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
     robot_state = robot_state_copy_;
   }
-
+  
   // 计算速度控制输出
   double local_torque[6] = {0};
   for (int i = 0; i < 6; i++) {
@@ -447,7 +447,7 @@ void StateRL::_V_actuate() {
       //      local_torque[i] = this->pid_controllers[i].out;
     }
   }
-
+  
   // 线程安全地更新 torque 数组
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
@@ -464,7 +464,7 @@ void StateRL::_T_actuate() {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);
     robot_state = robot_state_copy_;
   }
-
+  
   // 计算力矩控制输出
   double local_torque[6] = {0};
   for (int i = 0; i < 6; i++) {
@@ -476,7 +476,7 @@ void StateRL::_T_actuate() {
       //      local_torque[i] = this->desired_torque[i] + compensation;
     }
   }
-
+  
   // 线程安全地更新 torque 数组
   {
     std::lock_guard<std::mutex> lock(robot_state_mutex_);

@@ -45,6 +45,7 @@ public:
     this->declare_parameter<double>("default_height", 0.2);
     this->declare_parameter<double>("linear_vel_rate", 1.0);   // m/s per second for mode 1
     this->declare_parameter<double>("angular_vel_rate", 1.0);  // rad/s per second for mode 1
+    this->declare_parameter<bool>("use_rate_in_continuous_mode", false);  // For mode 1: true=use rate, false=instant max speed
     this->declare_parameter<std::string>("prefix", "");
     this->declare_parameter<std::string>("motion_command_topic", "motion_command");
     this->declare_parameter<std::string>("height_command_topic", "height_command");
@@ -61,6 +62,7 @@ public:
     default_height_ = this->get_parameter("default_height").as_double();
     linear_vel_rate_ = this->get_parameter("linear_vel_rate").as_double();
     angular_vel_rate_ = this->get_parameter("angular_vel_rate").as_double();
+    use_rate_in_continuous_mode_ = this->get_parameter("use_rate_in_continuous_mode").as_bool();
     std::string prefix = this->get_parameter("prefix").as_string();
     std::string motion_topic = this->get_parameter("motion_command_topic").as_string();
     std::string height_topic = this->get_parameter("height_command_topic").as_string();
@@ -75,6 +77,11 @@ public:
     RCLCPP_INFO(this->get_logger(), 
       "Control mode: %d (%s)", control_mode_, 
       control_mode_ == 0 ? "Step mode" : "Continuous mode");
+    if (control_mode_ == 1) {
+      RCLCPP_INFO(this->get_logger(), 
+        "Continuous mode subtype: %s", 
+        use_rate_in_continuous_mode_ ? "Rate-based (gradual change)" : "Instant (max speed on press)");
+    }
 
     // Add namespace prefix to topic names if specified
     if (!prefix.empty()) {
@@ -159,7 +166,11 @@ private:
       if (control_mode_ == 0) {
         std::cout << "  (Each key press increases/decreases by a fixed step)\n";
       } else {
-        std::cout << "  (Hold keys to continuously change, release to return to zero)\n";
+        if (use_rate_in_continuous_mode_) {
+          std::cout << "  (Hold keys to continuously change at rate, release to return to zero)\n";
+        } else {
+          std::cout << "  (Press keys for instant max speed, release to return to zero)\n";
+        }
       }
       std::cout << "Note: Height control always uses step mode\n";
       std::cout << "\n";
@@ -252,24 +263,26 @@ private:
 
     RCLCPP_INFO(this->get_logger(), "Keyboard input loop started. Waiting for input...");
 
-    char c;
+    char buffer[1];  // Buffer to read multiple characters at once
     while (rclcpp::ok() && running_) {
       // Read all available characters in the buffer to handle simultaneous key presses
-      while (true) {
-        ssize_t bytes_read = read(STDIN_FILENO, &c, 1);
-        if (bytes_read > 0) {
-          processKeyInput(c);
-        } else if (bytes_read < 0) {
-          // Check if it's just EAGAIN/EWOULDBLOCK (expected for non-blocking I/O)
-          if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            RCLCPP_WARN(this->get_logger(), "Error reading from stdin: %s", strerror(errno));
-          }
-          break;  // No more data available, exit inner loop
-        } else {
-          break;  // EOF or no data
+      // Use a larger buffer to read multiple characters in one call
+      ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
+
+      if (bytes_read > 0) {
+        // Process all characters read in this batch
+        for (ssize_t i = 0; i < bytes_read; ++i) {
+          processKeyInput(buffer[i]);
+        }
+      } else if (bytes_read < 0) {
+        // Check if it's just EAGAIN/EWOULDBLOCK (expected for non-blocking I/O)
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+          RCLCPP_WARN(this->get_logger(), "Error reading from stdin: %s", strerror(errno));
         }
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));  // Reduced sleep time for faster response
+      // No sleep or very short sleep for maximum responsiveness
+      // The non-blocking read will return immediately if no data is available
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     // Restore terminal settings
@@ -357,7 +370,7 @@ private:
     } else {
       // Mode 1: Continuous mode (update key state)
       auto now = std::chrono::steady_clock::now();
-      
+
       // Update the timestamp for the pressed key
       // This allows multiple keys to be pressed simultaneously
       switch (c) {
@@ -448,55 +461,122 @@ private:
     auto dt = std::chrono::duration<double>(now - last_update_time_).count();
     last_update_time_ = now;
     
-    // Key timeout: if a key hasn't been updated in 200ms, consider it released
-    // Increased timeout to handle simultaneous key presses better
-    auto timeout_threshold = now - std::chrono::milliseconds(200);
+    // Key timeout: if a key hasn't been updated in 500ms, consider it released
+    // Increased timeout to handle key repeat delays better
+    auto timeout_threshold = now - std::chrono::milliseconds(500);
     
-    // Update lin_vel_x
-    if (pressed_keys_.find('w') != pressed_keys_.end() && 
-        pressed_keys_['w'] > timeout_threshold) {
-      current_lin_vel_x_ = std::min(current_lin_vel_x_ + linear_vel_rate_ * dt, max_linear_vel_);
-    } else if (pressed_keys_.find('s') != pressed_keys_.end() && 
-               pressed_keys_['s'] > timeout_threshold) {
-      current_lin_vel_x_ = std::max(current_lin_vel_x_ - linear_vel_rate_ * dt, -max_linear_vel_);
-    } else {
-      // Decay to zero
-      if (current_lin_vel_x_ > 0) {
-        current_lin_vel_x_ = std::max(0.0, current_lin_vel_x_ - linear_vel_rate_ * dt);
-      } else if (current_lin_vel_x_ < 0) {
-        current_lin_vel_x_ = std::min(0.0, current_lin_vel_x_ + linear_vel_rate_ * dt);
+    // Clean up timed-out keys from pressed_keys_ map
+    // This ensures that when user releases a key, it will be removed after timeout
+    // auto it = pressed_keys_.begin();
+    // while (it != pressed_keys_.end()) {
+    //   if (it->second < timeout_threshold) {
+    //     // Key has timed out, remove it
+    //     it = pressed_keys_.erase(it);
+    //   } else {
+    //     ++it;
+    //   }
+    // }
+
+    if (use_rate_in_continuous_mode_) {
+      // Mode 1a: Rate-based (gradual change)
+      // Update lin_vel_x
+      bool w_active = pressed_keys_.find('w') != pressed_keys_.end() &&
+                      pressed_keys_['w'] > timeout_threshold;
+      bool s_active = pressed_keys_.find('s') != pressed_keys_.end() && 
+                      pressed_keys_['s'] > timeout_threshold;
+      
+      if (w_active) {
+        current_lin_vel_x_ = std::min(current_lin_vel_x_ + linear_vel_rate_ * dt, max_linear_vel_);
+      } else if (s_active) {
+        current_lin_vel_x_ = std::max(current_lin_vel_x_ - linear_vel_rate_ * dt, -max_linear_vel_);
+      } else {
+        // Decay to zero - key is either not pressed or has timed out
+        if (current_lin_vel_x_ > 0) {
+          current_lin_vel_x_ = std::max(0.0, current_lin_vel_x_ - linear_vel_rate_ * dt);
+        } else if (current_lin_vel_x_ < 0) {
+          current_lin_vel_x_ = std::min(0.0, current_lin_vel_x_ + linear_vel_rate_ * dt);
+        }
       }
-    }
-    
-    // Update lin_vel_y
-    if (pressed_keys_.find('q') != pressed_keys_.end() && 
-        pressed_keys_['q'] > timeout_threshold) {
-      current_lin_vel_y_ = std::min(current_lin_vel_y_ + linear_vel_rate_ * dt, max_linear_vel_);
-    } else if (pressed_keys_.find('e') != pressed_keys_.end() && 
-               pressed_keys_['e'] > timeout_threshold) {
-      current_lin_vel_y_ = std::max(current_lin_vel_y_ - linear_vel_rate_ * dt, -max_linear_vel_);
-    } else {
-      // Decay to zero
-      if (current_lin_vel_y_ > 0) {
-        current_lin_vel_y_ = std::max(0.0, current_lin_vel_y_ - linear_vel_rate_ * dt);
-      } else if (current_lin_vel_y_ < 0) {
-        current_lin_vel_y_ = std::min(0.0, current_lin_vel_y_ + linear_vel_rate_ * dt);
+      
+      // Update lin_vel_y
+      bool q_active = pressed_keys_.find('q') != pressed_keys_.end() && 
+                      pressed_keys_['q'] > timeout_threshold;
+      bool e_active = pressed_keys_.find('e') != pressed_keys_.end() && 
+                      pressed_keys_['e'] > timeout_threshold;
+      
+      if (q_active) {
+        current_lin_vel_y_ = std::min(current_lin_vel_y_ + linear_vel_rate_ * dt, max_linear_vel_);
+      } else if (e_active) {
+        current_lin_vel_y_ = std::max(current_lin_vel_y_ - linear_vel_rate_ * dt, -max_linear_vel_);
+      } else {
+        // Decay to zero
+        if (current_lin_vel_y_ > 0) {
+          current_lin_vel_y_ = std::max(0.0, current_lin_vel_y_ - linear_vel_rate_ * dt);
+        } else if (current_lin_vel_y_ < 0) {
+          current_lin_vel_y_ = std::min(0.0, current_lin_vel_y_ + linear_vel_rate_ * dt);
+        }
       }
-    }
-    
-    // Update ang_vel_z
-    if (pressed_keys_.find('a') != pressed_keys_.end() && 
-        pressed_keys_['a'] > timeout_threshold) {
-      current_ang_vel_z_ = std::min(current_ang_vel_z_ + angular_vel_rate_ * dt, max_angular_vel_);
-    } else if (pressed_keys_.find('d') != pressed_keys_.end() && 
-               pressed_keys_['d'] > timeout_threshold) {
-      current_ang_vel_z_ = std::max(current_ang_vel_z_ - angular_vel_rate_ * dt, -max_angular_vel_);
+      
+      // Update ang_vel_z
+      bool a_active = pressed_keys_.find('a') != pressed_keys_.end() && 
+                      pressed_keys_['a'] > timeout_threshold;
+      bool d_active = pressed_keys_.find('d') != pressed_keys_.end() && 
+                      pressed_keys_['d'] > timeout_threshold;
+      
+      if (a_active) {
+        current_ang_vel_z_ = std::min(current_ang_vel_z_ + angular_vel_rate_ * dt, max_angular_vel_);
+      } else if (d_active) {
+        current_ang_vel_z_ = std::max(current_ang_vel_z_ - angular_vel_rate_ * dt, -max_angular_vel_);
+      } else {
+        // Decay to zero
+        if (current_ang_vel_z_ > 0) {
+          current_ang_vel_z_ = std::max(0.0, current_ang_vel_z_ - angular_vel_rate_ * dt);
+        } else if (current_ang_vel_z_ < 0) {
+          current_ang_vel_z_ = std::min(0.0, current_ang_vel_z_ + angular_vel_rate_ * dt);
+        }
+      }
     } else {
-      // Decay to zero
-      if (current_ang_vel_z_ > 0) {
-        current_ang_vel_z_ = std::max(0.0, current_ang_vel_z_ - angular_vel_rate_ * dt);
-      } else if (current_ang_vel_z_ < 0) {
-        current_ang_vel_z_ = std::min(0.0, current_ang_vel_z_ + angular_vel_rate_ * dt);
+      // Mode 1b: Instant max speed (no rate)
+      // Update lin_vel_x
+      bool w_active = pressed_keys_.find('w') != pressed_keys_.end() &&
+                      pressed_keys_['w'] > timeout_threshold;
+      bool s_active = pressed_keys_.find('s') != pressed_keys_.end() && 
+                      pressed_keys_['s'] > timeout_threshold;
+      
+      if (w_active) {
+        current_lin_vel_x_ = max_linear_vel_;
+      } else if (s_active) {
+        current_lin_vel_x_ = -max_linear_vel_;
+      } else {
+        current_lin_vel_x_ = 0.0;
+      }
+      
+      // Update lin_vel_y
+      bool q_active = pressed_keys_.find('q') != pressed_keys_.end() && 
+                      pressed_keys_['q'] > timeout_threshold;
+      bool e_active = pressed_keys_.find('e') != pressed_keys_.end() && 
+                      pressed_keys_['e'] > timeout_threshold;
+      
+      if (q_active) {
+        current_lin_vel_y_ = max_linear_vel_;
+      } else if (e_active) {
+        current_lin_vel_y_ = -max_linear_vel_;
+      } else {
+        current_lin_vel_y_ = 0.0;
+      }
+      
+      // Update ang_vel_z
+      bool a_active = pressed_keys_.find('a') != pressed_keys_.end() && 
+                      pressed_keys_['a'] > timeout_threshold;
+      bool d_active = pressed_keys_.find('d') != pressed_keys_.end() && 
+                      pressed_keys_['d'] > timeout_threshold;
+      
+      if (a_active) {
+        current_ang_vel_z_ = max_angular_vel_;
+      } else if (d_active) {
+        current_ang_vel_z_ = -max_angular_vel_;
+      } else {
+        current_ang_vel_z_ = 0.0;
       }
     }
     
@@ -561,6 +641,7 @@ private:
   double default_height_;
   double linear_vel_rate_;   // For continuous mode (m/s per second)
   double angular_vel_rate_;  // For continuous mode (rad/s per second)
+  bool use_rate_in_continuous_mode_;  // For mode 1: true=use rate, false=instant max speed
 
   // Continuous mode state
   std::map<char, std::chrono::steady_clock::time_point> pressed_keys_;

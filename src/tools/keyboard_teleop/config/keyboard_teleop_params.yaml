@@ -17,9 +17,12 @@
     max_height: 0.35           # 最大高度 (m)
     default_height: 0.2         # 初始默认高度 (m)
     
-    # 速度变化速率（模式1使用，单位：每秒的变化量）
-    linear_vel_rate: 1.0       # 线速度变化速率 (m/s per second)
-    angular_vel_rate: 1.0      # 角速度变化速率 (rad/s per second)
+    # 连续模式子选项（模式1使用）
+    use_rate_in_continuous_mode: false  # true=使用速率变化（按下时按速率增长，松开时按速率归零），false=立即最大速度（按下即最大速度，松开即归零）
+    
+    # 速度变化速率（模式1且use_rate_in_continuous_mode=true时使用，单位：每秒的变化量）
+    linear_vel_rate: 2.0       # 线速度变化速率 (m/s per second)
+    angular_vel_rate: 2.0      # 角速度变化速率 (rad/s per second)
     
     # 命名空间前缀（用于匹配控制器的命名空间，例如 "wheelbipe25_v3"）
     prefix: "wheelbipe25_v3"                        # 命名空间前缀，留空表示不使用命名空间

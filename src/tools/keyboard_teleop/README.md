@@ -8,6 +8,13 @@
 - `motion_command` (geometry_msgs/Twist): 线速度和角速度指令
 - `height_command` (std_msgs/Float64): 高度指令
 
+### 控制模式
+
+- **模式 0（步进模式）**：每次按键增加/减少固定步进值
+- **模式 1（连续模式）**：支持两种子模式
+  - **速率模式**：按下按键时速度按速率增长，松开时按速率归零
+  - **即时模式**：按下按键立即达到最大速度，松开按键立即归零
+
 ## 编译
 
 ```bash
@@ -39,6 +46,7 @@ ros2 run keyboard_teleop keyboard_teleop_node \
   --params-file $(ros2 pkg prefix keyboard_teleop)/share/keyboard_teleop/config/keyboard_teleop_params.yaml \
   -p prefix:="wheelbipe25_v3" \
   -p control_mode:=1 \
+  -p use_rate_in_continuous_mode:=true \
   -p linear_vel_rate:=0.8 \
   -p angular_vel_rate:=0.6
 ```
@@ -46,7 +54,9 @@ ros2 run keyboard_teleop keyboard_teleop_node \
 **重要说明：**
 - 如果控制器在命名空间下运行（如 `/wheelbipe25_v3`），必须设置 `prefix` 参数以匹配控制器的命名空间
 - `control_mode=0` 为步进模式（每次按键增加/减少固定值）
-- `control_mode=1` 为连续模式（按键持续按下时按速率变化，松开时自动恢复到0）
+- `control_mode=1` 为连续模式，包含两种子模式：
+  - `use_rate_in_continuous_mode=true`: 速率模式（按下时按速率增长，松开时按速率归零）
+  - `use_rate_in_continuous_mode=false`: 即时模式（按下即最大速度，松开即归零）
 
 ### 使用 Launch 文件启动（不推荐）
 
@@ -87,8 +97,12 @@ ros2 launch keyboard_teleop keyboard_teleop.launch.py \
 ### 控制模式
 
 - `control_mode`: 控制模式
-  - `0`: 步进模式（默认）- 每次按键增加/减少固定步进值
-  - `1`: 连续模式 - 按键持续按下时按速率变化，松开时以相同速率恢复到0
+  - `0`: 步进模式 - 每次按键增加/减少固定步进值
+  - `1`: 连续模式 - 支持两种子模式（通过 `use_rate_in_continuous_mode` 参数选择）
+
+**连续模式子选项（`use_rate_in_continuous_mode`）：**
+- `true`: 速率模式 - 按键持续按下时按速率变化，松开时以相同速率恢复到0
+- `false`: 即时模式 - 按下按键立即达到最大速度，松开按键立即归零
 
 ### 主要参数
 
@@ -108,8 +122,11 @@ ros2 launch keyboard_teleop keyboard_teleop.launch.py \
 - `height_step`: 高度步进值 (m)
 
 **模式1（连续模式）参数：**
-- `linear_vel_rate`: 线速度变化速率 (m/s per second)
-- `angular_vel_rate`: 角速度变化速率 (rad/s per second)
+- `use_rate_in_continuous_mode`: 连续模式子选项
+  - `true`: 使用速率模式（按下时按速率增长，松开时按速率归零）
+  - `false`: 使用即时模式（按下即最大速度，松开即归零）
+- `linear_vel_rate`: 线速度变化速率 (m/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
+- `angular_vel_rate`: 角速度变化速率 (rad/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
 
 详细的参数说明和默认值请参考 `config/keyboard_teleop_params.yaml` 文件中的注释。
 

@@ -1,171 +1,158 @@
 # wheelbipe_ros2_sim2sim
 
-Wheelbipe 双轮机器人在多仿真环境下用于 RL 训练与控制的 ROS 2 工程。仓库提供了 Webots 世界、机器人描述、ROS 控制器以及桥接节点，可在纯仿真环境中复现 sim2sim 流程。
+Wheelbipe 双轮机器人在 Webots 仿真环境下的 ROS 2 控制框架，支持 RL 训练与 sim2sim 流程。
 
----
+## 环境要求
 
-## 环境与依赖
-
-| 组件 | 版本 & 说明 |
+| 组件 | 版本/说明 |
 | --- | --- |
-| 操作系统 | Ubuntu 22.04（推荐） |
-| ROS 2 | Humble Hawksbill（desktop 版，包含 `ros2-control`、`webots_ros2_driver` 等） |
-| 构建工具 | `colcon`, `ament_cmake_auto` |
-| 仿真器 | [Webots ≥ R2023a](https://cyberbotics.com/) |
-| CUDA / TensorRT (可选) | 若使用 RL 推理（`template_ros2_controller` 内启用 TensorRT）需安装 CUDA 12.x 与 TensorRT 10.x，并设置 `LD_LIBRARY_PATH` 指向 `libnvinfer.so` 等库 |
-| 其他 | `xacro`, `python3-colcon-common-extensions`, `pip install webots-ros2`（若未通过 apt 安装） |
+| 操作系统 | Ubuntu 22.04 |
+| ROS 2 | Humble Hawksbill (desktop) |
+| 仿真器 | Webots ≥ R2023a |
+| CUDA/TensorRT | CUDA 12.x + TensorRT 10.x (可选，用于 RL 推理) |
 
-> **提示**：如果系统或 Conda 环境里同时安装了多个 `libfmt` 版本，请确保编译时优先使用系统的共享库（仓库中的 `CMakeLists.txt` 已屏蔽 `/usr/local/lib/libfmt.a`）。
+## 快速开始
 
----
+### 1. 安装依赖
+
+```bash
+# ROS 2 基础依赖
+sudo apt install ros-humble-desktop ros-humble-webots-ros2-driver \
+                 ros-humble-webots-ros2-control python3-colcon-common-extensions \
+                 ros-humble-xacro
+
+# TensorRT (可选)
+sudo apt install nvidia-cuda-dev tensorrt-dev tensorrt
+
+# ros2_control 扩展
+# 参考: https://github.com/DDTRobot/TITA_ROS2_Control_Sim.git
+
+# 安装TensorRT（参考版本为10.9）
+# https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html
+# https://zhuanlan.zhihu.com/p/679763042
+```
+
+### 2. 构建
+
+```bash
+# 克隆仓库
+git clone <repository_url>
+cd wheelbipe_ros2_sim2sim
+
+# 配置环境
+source /opt/ros/humble/setup.bash
+
+# 构建
+colcon build
+
+# 使用
+source install/setup.bash
+```
+
+### 3. 运行仿真
+
+```bash
+source install/setup.bash
+
+# 启动 Webots 仿真
+ros2 launch template_middleware template_bring_up.launch.py \
+  prefix:=wheelbipe25_v3
+```
+
+**启动参数：**
+- `prefix`: 机器人模型前缀（默认 `wheelbipe25_v3`）（通过前缀更换机器人）
+
+### 4.键盘遥操作
+
+键盘遥操作工具 (`keyboard_teleop`) 支持通过键盘控制机器人运动。详细使用说明请参考：[keyboard_teleop README](src/tools/keyboard_teleop/README.md)
+
+### 5.一般使用流程
+
+- rl仓库中通过play，自动完成.pt->.onnx模型文件导出
+
+- 使用tensorrt的量化器量化模型
+
+```bash
+<path_to_tensorrt>/bin/trtexec --onnx=<onnx_filename> --saveEngine=<engine_filename>
+```
+
+- 修改template_ros2_controller_parameters.yaml，注意配置`rl_model_path`为本地绝对路径
+- 编译
+
+```bash
+source /opt/ros/humble/setup.bash && colcon build
+source install/setup.bash
+```
+
+- 运行仿真
+
+```bash
+ros2 launch template_middleware template_bring_up.launch.py \
+  prefix:=wheelbipe25_v3
+```
+
+- 启动键盘
+
+```bash
+ros2 run keyboard_teleop keyboard_teleop_node \
+  --ros-args \
+  --params-file $(ros2 pkg prefix keyboard_teleop)/share/keyboard_teleop/config/keyboard_teleop_params.yaml
+```
 
 ## 仓库结构
 
 ```
 src/
-├── controllers/
-│   └── template_ros2_controller/   # RL 控制器（ros2_control 插件，含 TensorRT 推理）
-├── interfaces/
-│   └── webots_bridge/              # 启动 Webots 并桥接 ros2_control 的节点
-├── middlewares/
-│   └── template_middleware/        # 中间件/工具脚本（占位）
-└── resources/
-    └── robot_descriptions/         # Wheelbipe25 v3 模型（URDF/Xacro、Webots 世界、STL）
+├── controllers/template_ros2_controller/    # RL 控制器（ros2_control 插件）
+├── interfaces/webots_bridge/                 # Webots 桥接节点
+├── middlewares/template_middleware/          # 启动文件与配置
+├── resources/robot_descriptions/             # 机器人模型（URDF/Xacro、Webots 世界）
+└── tools/keyboard_teleop/                    # 键盘遥操作工具
 ```
 
-关键文件与配置：
+## 配置说明
 
-- `config/template_ros2_controller_parameters.yaml`：控制器参数（关节 PD、推理频率、时间同步方式等）。
-- `interfaces/webots_bridge/config/controllers.yaml`：`ros2_control` 控制器组合。
-- `resources/robot_descriptions/wheelbipe25_v3/worlds/*.wbt`：Webots 世界文件。
-- `interfaces/webots_bridge/launch/webots_bridge.launch.py`：统一启动 Webots + ros2_control + Robot State Publisher。
+### 控制器参数
 
----
+主要配置文件：`src/controllers/template_ros2_controller/config/template_ros2_controller_parameters.yaml`
 
-## 构建步骤
+关键参数：
+- `rl_model_path`: TensorRT 引擎文件路径==（需要手动修改为本地的绝对路径）==
+- `rl_inference_frequency`: 推理频率 (Hz)
+- `inference_mode` / `lowlevel_mode`: 调度模式（0=线程，1=ROS2 定时器，2=内联）
+- `joint_stiffness` / `joint_damping`: 关节 PD 参数
+- `joint_action_scale`: 动作缩放
+- `joint_output_max` / `joint_output_min`: 输出限幅
+- `joint_bias`: 关节偏置
+- `default_dof_pos`: 默认关节位置
 
-安装ros2_control   
-https://github.com/DDTRobot/TITA_ROS2_Control_Sim.git
+### 机器人模型
 
-安装TensorRT（参考版本为10.9）
+模型文件位于 `src/resources/robot_descriptions/<prefix>/`：
+- `xacro/robot.xacro`: 机器人描述文件
+- `worlds/*.wbt`: Webots 世界文件
+- `meshes/*.STL`: 实体网格
 
-https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html
-
-https://zhuanlan.zhihu.com/p/679763042
-
-```bash
-sudo apt install nvidia-cuda-dev
-sudo apt install tensorrt-dev
-sudo apt install tensorrt
-```
-
-```bash
-# 1. 安装依赖（示例）
-sudo apt update
-sudo apt install ros-humble-desktop ros-humble-webots-ros2-driver \
-                 ros-humble-webots-ros2-control python3-colcon-common-extensions \
-                 ros-humble-xacro
-
-# 2. 克隆仓库
-git clone https://github.com/<your_org>/wheelbipe_ros2_sim2sim.git
-cd wheelbipe_ros2_sim2sim
-
-# 3. 配置环境变量（每次新终端）
-source /opt/ros/humble/setup.bash
-
-# 4. 构建
-colcon build --packages-up-to robot_descriptions webots_bridge template_middleware template_ros2_controller
-
-# 5. 使用结果
-source install/setup.bash
-```
-
-若启用 TensorRT，请确保：
-
-```bash
-export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH   # 包含 libnvinfer.so
-```
-
----
-
-## 运行 Webots 仿真
-
-1. 启动 Webots + ros2_control：
-
-   ```bash
-   source install/setup.bash
-   ros2 launch template_middleware template_bring_up.launch.py \
-     prefix:=wheelbipe25_v3
-   ```
-
-   参数说明：
-
-   - `prefix`：选择 `robot_descriptions/<prefix>` 下的模型与 world（默认 `wheelbipe25_v3`）。
-   - `ctrl_mode`：`wbc`（默认）、`sdk`、`mcu`，传递给 `xacro` 以切换控制接口。
-   - `yaml_path`：控制器配置所在包名（默认 `webots_bridge`，即 `interfaces/webots_bridge/config/<prefix>.yaml`）。
-
-2. 启动后将：
-   - 打开对应的 `.wbt` 世界
-   - 自动加载 `robot_state_publisher`
-   - 通过 `webots_ros2_driver` + `webots_ros2_control` 实例化 `template_ros2_controller`
-
----
-
-## 控制器与参数
-
-### `template_ros2_controller`
-
-- 由 `ros2_control` 加载的自定义控制器，路径：`src/controllers/template_ros2_controller`.
-- 内置 TensorRT 推理接口（`src/tensorrt_cuda/tensorrt_inference.cpp`）。若 `TENSORRT_AVAILABLE` 未定义，则自动降级为占位实现。
-- 关键参数位于 `config/template_ros2_controller_parameters.yaml`：
-  - `rl_model_path`：TensorRT 引擎路径。
-  - `rl_inference_frequency`：推理频率（Hz）。
-  - `use_period_for_inference_timing` / `use_period_for_lowlevel_timing`：选择基于 ROS 2 `period` 还是系统时间调度。
-  - 关节/车轮 PD 参数、弹簧力等。
-
-如需更新参数，可修改 yaml 后重新 `colcon build` 或在运行时通过 `ros2 param` 动态修改（控制器会检测 `param_listener_->is_old()`）。
-
-### `webots_bridge`
-
-- 主要负责启动 Webots、生成 robot_description、实例化 `webots_ros2_driver` 控制器以及 `robot_state_publisher`。
-- 配置文件：`interfaces/webots_bridge/config/controllers.yaml`（定义 ros2_control 控制器组合、接口类型等）。
-
-### Robot descriptions
-
-- 位于 `resources/robot_descriptions/wheelbipe25_v3`：
-  - `xacro/robot.xacro`：机器人主体，参数化控制模式、传感器等。
-  - `worlds/*.wbt`：多种地形/场景。
-  - `meshes/*.STL`：实体网格。
-
-可复制该模板目录，以不同 `prefix` 创建新机器人/场景。
-
----
-
-## 常见命令速查
+## 常用命令
 
 | 操作 | 命令 |
 | --- | --- |
-| 清理单个包构建 | `colcon build --packages-select template_ros2_controller --cmake-clean-cache` |
-| 仅启动 Webots （默认参数） | `ros2 launch webots_bridge webots_bridge.launch.py` |
-| 指定世界 & 控制模式 | `ros2 launch webots_bridge webots_bridge.launch.py prefix:=wheelbipe25_v3 ctrl_mode:=sdk` |
 | 检查控制器状态 | `ros2 control list_controllers` |
-| 查看关节状态/命令 | `ros2 topic echo /wheelbipe25_v3/joint_states` |
-
----
+| 查看关节状态 | `ros2 topic echo /<prefix>/joint_states` |
+| 键盘遥操作 | `ros2 launch keyboard_teleop keyboard_teleop.launch.py` |
+| 清理构建缓存 | `colcon build --packages-select <package> --cmake-clean-cache` |
 
 ## 故障排查
 
 | 问题 | 解决方案 |
 | --- | --- |
-| 链接时报 `libfmt.a` / `-fPIC` 相关错误 | 确保未引用 `/usr/local/lib/libfmt.a`（仓库 CMake 已默认排除）。若仍报错，检查环境变量/Conda 是否注入额外路径。 |
-| 找不到 TensorRT 或 CUDA 库 | 确认 `LD_LIBRARY_PATH` 包含 `/usr/lib/x86_64-linux-gnu`（或系统 TensorRT 路径），或在 `config/template_ros2_controller_parameters.yaml` 中暂时禁用 RL 推理。 |
-| `webots_ros2_driver` 无法连接控制器 | 检查 `controllers.yaml` 与 `prefix` 是否匹配；确认 `ros2_control` 插件名（`template_ros2_controller/TemplateRos2Controller`）正确。 |
-| Webots 未启动或自动退出 | 使用 `--ros-args --log-level debug` 运行 `webots_bridge` 查看详细日志；确认 `robot_descriptions/<prefix>/worlds/<prefix>.wbt` 存在。 |
-
----
+| `libfmt.a` 链接错误 | 检查环境变量，确保未引用 `/usr/local/lib/libfmt.a` |
+| TensorRT 库未找到 | 设置 `export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH` |
+| Webots 未启动 | 检查 `robot_descriptions/<prefix>/worlds/<prefix>.wbt` 是否存在 |
+| 控制器加载失败 | 确认 `controllers.yaml` 与 `prefix` 匹配，插件名正确 |
 
 ## 参考
 
-- [Webots ROS 2 文档](https://github.com/cyberbotics/webots_ros2)
+- [Webots ROS 2](https://github.com/cyberbotics/webots_ros2)
 - [ros2_control](https://control.ros.org/)
-- [TensorRT Deployment Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html)
+- [TensorRT 文档](https://docs.nvidia.com/deeplearning/tensorrt/)
