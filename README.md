@@ -47,7 +47,7 @@ src/
 安装ros2_control   
 https://github.com/DDTRobot/TITA_ROS2_Control_Sim.git
 
-安装TensorRT
+安装TensorRT（参考版本为10.9）
 
 https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html
 

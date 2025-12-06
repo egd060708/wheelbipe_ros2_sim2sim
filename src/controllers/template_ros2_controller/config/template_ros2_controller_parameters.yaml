@@ -29,7 +29,7 @@ template_ros2_controller:
   inference_mode:
     {
       type: int,
-      default_value: 0,
+      default_value: 1,
       description: "Inference scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline",
       validation: { bounds<>: [0, 2] },
     }
@@ -42,7 +42,7 @@ template_ros2_controller:
   lowlevel_mode:
     {
       type: int,
-      default_value: 0,
+      default_value: 1,
       description: "Lowlevel scheduling mode: 0=thread(system time), 1=ROS2 timer, 2=inline in run()",
       validation: { bounds<>: [0, 2] },
     }

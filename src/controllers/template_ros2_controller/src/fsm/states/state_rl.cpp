@@ -203,7 +203,7 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
   for (const auto &cmd_vel : robot_state.command.cmd_vel) {
     model_input.push_back(static_cast<float>(cmd_vel));
   }
-  robot_state.command.cmd_height = 0.2;
+  // 使用从话题订阅获取的高度指令（不再硬编码）
   model_input.push_back(static_cast<float>(robot_state.command.cmd_height));
 
   // 添加上一次的模型输出

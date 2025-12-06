@@ -15,6 +15,7 @@
 #include "template_ros2_controller/template_ros2_controller.hpp"
 // #include <template_ros2_controller/template_ros2_controller_parameters.hpp>
 #include "utils/timeMarker.h"
+#include <mutex>
 
 #include "pluginlib/class_list_macros.hpp"
 namespace robot_locomotion
@@ -118,6 +119,13 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_configure(
   for (size_t i = 0; i < joint_names_.size(); ++i) {
     robot_state_.joints[i].name = joint_names_[i];
   }
+
+  // 初始化运动指令数据
+  motion_cmd_received_ = false;
+  latest_lin_vel_x_ = 0.0;
+  latest_lin_vel_y_ = 0.0;
+  latest_ang_vel_z_ = 0.0;
+  latest_height_ = 0.2;  // 默认高度
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -261,13 +269,71 @@ void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rc
   robot_state_.timestamp = time.seconds();
   robot_state_.period = period.seconds();
 
+  // 更新运动指令（从订阅的话题中获取）
+  {
+    std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
+    robot_state_.command.cmd_vel[0] = latest_lin_vel_x_;
+    robot_state_.command.cmd_vel[1] = latest_lin_vel_y_;
+    robot_state_.command.cmd_vel[2] = latest_ang_vel_z_;
+    robot_state_.command.cmd_height = latest_height_;
+    
+    // 定期打印命令值（每100次更新打印一次，约0.2秒一次）
+    static int debug_counter = 0;
+    if (++debug_counter % 100 == 0) {
+      RCLCPP_DEBUG(get_node()->get_logger(),
+        "Current command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f, height=%.3f, received=%d",
+        latest_lin_vel_x_, latest_lin_vel_y_, latest_ang_vel_z_, latest_height_, motion_cmd_received_);
+    }
+  }
+
   // 计算广义状态
   robot_state_.run();
+}
+
+void TemplateRos2Controller::motionCommandCallback(
+  const geometry_msgs::msg::Twist::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
+  latest_lin_vel_x_ = msg->linear.x;
+  latest_lin_vel_y_ = msg->linear.y;
+  latest_ang_vel_z_ = msg->angular.z;
+  motion_cmd_received_ = true;
+  RCLCPP_INFO(get_node()->get_logger(), 
+    "Received motion command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f",
+    msg->linear.x, msg->linear.y, msg->angular.z);
+}
+
+void TemplateRos2Controller::heightCommandCallback(
+  const std_msgs::msg::Float64::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
+  latest_height_ = msg->data;
+  RCLCPP_INFO(get_node()->get_logger(), "Received height command: %.3f", msg->data);
 }
 
 // 从失能状态到激活状态
 controller_interface::CallbackReturn TemplateRos2Controller::on_activate(const rclcpp_lifecycle::State &)
 {
+  // 创建运动指令话题订阅者
+  std::string motion_topic = "motion_command";
+  std::string height_topic = "height_command";
+  
+  motion_cmd_subscriber_ = get_node()->create_subscription<geometry_msgs::msg::Twist>(
+    motion_topic, 10,
+    std::bind(&TemplateRos2Controller::motionCommandCallback, this, std::placeholders::_1));
+  height_cmd_subscriber_ = get_node()->create_subscription<std_msgs::msg::Float64>(
+    height_topic, 10,
+    std::bind(&TemplateRos2Controller::heightCommandCallback, this, std::placeholders::_1));
+  
+  // 获取节点的完整话题名称（包括命名空间）
+  std::string node_namespace = get_node()->get_namespace();
+  RCLCPP_INFO(get_node()->get_logger(), 
+    "Motion command subscribers created. Node namespace: '%s'", node_namespace.c_str());
+  RCLCPP_INFO(get_node()->get_logger(), 
+    "Subscribing to topics: '%s' (full: '%s'), '%s' (full: '%s')",
+    motion_topic.c_str(), motion_cmd_subscriber_->get_topic_name(),
+    height_topic.c_str(), height_cmd_subscriber_->get_topic_name());
+
   // 查找并绑定关节命令接口
   RCLCPP_INFO(get_node()->get_logger(), "on_activate");
   for (std::shared_ptr<Joint> joint : joints_) {
