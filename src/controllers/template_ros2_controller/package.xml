@@ -4,7 +4,7 @@
   <name>template_ros2_controller</name>
   <version>0.0.0</version>
   <description>TODO: Wbc control frame</description>
-  <maintainer email="liukexin@directdrivetech.com">lkx</maintainer>
+  <maintainer email="2231625449@qq.com">zzr</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>

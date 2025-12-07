@@ -9,15 +9,6 @@ set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -O3")
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-# Explicitly find fmt package to use system shared library instead of /usr/local/lib/libfmt.a
-# Set CMAKE_PREFIX_PATH to prioritize system libraries over /usr/local and miniconda
-if(CMAKE_PREFIX_PATH)
-  list(REMOVE_ITEM CMAKE_PREFIX_PATH "/usr/local")
-  # Remove miniconda paths to avoid using miniconda's libfmt.so.9
-  string(REPLACE "/home/lu/miniconda3" "" CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
-  string(REPLACE "//" "/" CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
-  string(STRIP "${CMAKE_PREFIX_PATH}" CMAKE_PREFIX_PATH)
-endif()
 # Set linker flags to exclude /usr/local/lib/libfmt.a from being linked
 # Use APPEND to ensure flags are added correctly
 # Explicitly exclude /usr/local/lib from library search path and exclude libfmt.a

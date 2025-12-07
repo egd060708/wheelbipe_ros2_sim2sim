@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Direct Drive Technology Co., Ltd. All rights reserved.
+// Copyright (c) 2025 SCUT Robot Lab. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,16 @@
 #include <cstring>
 #include <map>
 #include <chrono>
+#include <cstdlib>
+
+// ANSI color codes
+#define RESET   "\033[0m"
+#define RED     "\033[31m"
+#define GREEN   "\033[32m"
+#define YELLOW  "\033[33m"
+#define BLUE    "\033[34m"
+#define MAGENTA "\033[35m"
+#define CYAN    "\033[36m"
 
 class KeyboardTeleopNode : public rclcpp::Node
 {
@@ -35,16 +45,19 @@ public:
   {
     // Declare parameters
     this->declare_parameter<int>("control_mode", 0);  // 0: step mode, 1: continuous mode
-    this->declare_parameter<double>("linear_vel_step", 0.1);
-    this->declare_parameter<double>("angular_vel_step", 0.1);
+    this->declare_parameter<double>("lin_vel_x_step", 0.1);
+    this->declare_parameter<double>("lin_vel_y_step", 0.1);
+    this->declare_parameter<double>("ang_vel_z_step", 0.1);
     this->declare_parameter<double>("height_step", 0.01);
-    this->declare_parameter<double>("max_linear_vel", 1.0);
-    this->declare_parameter<double>("max_angular_vel", 1.0);
+    this->declare_parameter<double>("max_lin_vel_x", 1.0);
+    this->declare_parameter<double>("max_lin_vel_y", 1.0);
+    this->declare_parameter<double>("max_ang_vel_z", 1.0);
     this->declare_parameter<double>("min_height", 0.2);
     this->declare_parameter<double>("max_height", 0.3);
     this->declare_parameter<double>("default_height", 0.2);
-    this->declare_parameter<double>("linear_vel_rate", 1.0);   // m/s per second for mode 1
-    this->declare_parameter<double>("angular_vel_rate", 1.0);  // rad/s per second for mode 1
+    this->declare_parameter<double>("lin_vel_x_rate", 1.0);   // m/s per second for mode 1
+    this->declare_parameter<double>("lin_vel_y_rate", 1.0);   // m/s per second for mode 1
+    this->declare_parameter<double>("ang_vel_z_rate", 1.0);  // rad/s per second for mode 1
     this->declare_parameter<bool>("use_rate_in_continuous_mode", false);  // For mode 1: true=use rate, false=instant max speed
     this->declare_parameter<std::string>("prefix", "");
     this->declare_parameter<std::string>("motion_command_topic", "motion_command");
@@ -52,16 +65,19 @@ public:
 
     // Get parameters
     control_mode_ = this->get_parameter("control_mode").as_int();
-    linear_vel_step_ = this->get_parameter("linear_vel_step").as_double();
-    angular_vel_step_ = this->get_parameter("angular_vel_step").as_double();
+    lin_vel_x_step_ = this->get_parameter("lin_vel_x_step").as_double();
+    lin_vel_y_step_ = this->get_parameter("lin_vel_y_step").as_double();
+    ang_vel_z_step_ = this->get_parameter("ang_vel_z_step").as_double();
     height_step_ = this->get_parameter("height_step").as_double();
-    max_linear_vel_ = this->get_parameter("max_linear_vel").as_double();
-    max_angular_vel_ = this->get_parameter("max_angular_vel").as_double();
+    max_lin_vel_x_ = this->get_parameter("max_lin_vel_x").as_double();
+    max_lin_vel_y_ = this->get_parameter("max_lin_vel_y").as_double();
+    max_ang_vel_z_ = this->get_parameter("max_ang_vel_z").as_double();
     min_height_ = this->get_parameter("min_height").as_double();
     max_height_ = this->get_parameter("max_height").as_double();
     default_height_ = this->get_parameter("default_height").as_double();
-    linear_vel_rate_ = this->get_parameter("linear_vel_rate").as_double();
-    angular_vel_rate_ = this->get_parameter("angular_vel_rate").as_double();
+    lin_vel_x_rate_ = this->get_parameter("lin_vel_x_rate").as_double();
+    lin_vel_y_rate_ = this->get_parameter("lin_vel_y_rate").as_double();
+    ang_vel_z_rate_ = this->get_parameter("ang_vel_z_rate").as_double();
     use_rate_in_continuous_mode_ = this->get_parameter("use_rate_in_continuous_mode").as_bool();
     std::string prefix = this->get_parameter("prefix").as_string();
     std::string motion_topic = this->get_parameter("motion_command_topic").as_string();
@@ -132,7 +148,7 @@ public:
     }
 
     RCLCPP_INFO(this->get_logger(), "Keyboard teleop node started");
-    printInstructions();
+    printStatus();
   }
 
   ~KeyboardTeleopNode()
@@ -146,78 +162,60 @@ public:
   }
 
 private:
-  void printInstructions()
+  void printStatus()
   {
-    // Print instructions once at startup
-    printStatus(true);
-  }
-  
-  void printStatus(bool print_instructions = false)
-  {
-    if (print_instructions || !instructions_printed_) {
-      // Clear screen and move cursor to top-left
-      std::cout << "\033[2J\033[H";  // ANSI escape codes: clear screen and home cursor
-      
-      // Print instructions (static content)
-      std::cout << "========================================\n";
-      std::cout << "Keyboard Teleoperation Control\n";
-      std::cout << "========================================\n";
-      std::cout << "Control Mode: " << (control_mode_ == 0 ? "Step Mode" : "Continuous Mode") << "\n";
-      if (control_mode_ == 0) {
-        std::cout << "  (Each key press increases/decreases by a fixed step)\n";
+    system("clear");
+    
+    std::cout << R"(
+  -------------------------------------------------------
+              Keyboard Teleoperation Control
+
+  Control Mode: )";
+    
+    // Print control mode with color
+    if (control_mode_ == 0) {
+      std::cout << GREEN << "Step Mode" << RESET;
+    } else {
+      std::cout << GREEN << "Continuous Mode" << RESET;
+      if (use_rate_in_continuous_mode_) {
+        std::cout << " (Rate-based)";
       } else {
-        if (use_rate_in_continuous_mode_) {
-          std::cout << "  (Hold keys to continuously change at rate, release to return to zero)\n";
-        } else {
-          std::cout << "  (Press keys for instant max speed, release to return to zero)\n";
-        }
+        std::cout << " (Instant)";
       }
-      std::cout << "Note: Height control always uses step mode\n";
-      std::cout << "\n";
-      std::cout << "Movement Control:\n";
-      std::cout << "  w/W : Forward velocity (lin_vel_x)\n";
-      std::cout << "  s/S : Backward velocity (lin_vel_x)\n";
-      std::cout << "  q/Q : Left velocity (lin_vel_y)\n";
-      std::cout << "  e/E : Right velocity (lin_vel_y)\n";
-      std::cout << "  a/A : Turn left (ang_vel_z)\n";
-      std::cout << "  d/D : Turn right (ang_vel_z)\n";
-      std::cout << "\n";
-      std::cout << "Height Control (always step mode):\n";
-      std::cout << "  t/T : Increase height\n";
-      std::cout << "  g/G : Decrease height\n";
-      std::cout << "\n";
-      std::cout << "Other:\n";
-      std::cout << "  Space : Stop all motion (reset velocities to 0)\n";
-      std::cout << "  r/R   : Reset height to default\n";
-      std::cout << "  x/X   : Exit program\n";
-      std::cout << "========================================\n";
-      std::cout << "\n";
-      std::cout << "Current Command Values:\n";
-      instructions_printed_ = true;
     }
     
-    // Only update command values if instructions have been printed
-    if (instructions_printed_) {
-      if (!print_instructions) {
-        // Move cursor back to the "Current Command Values" line
-        // Instructions take about 25 lines, so move to line 26
-        std::cout << "\033[26;1H";  // Move cursor to line 26, column 1
-        // Clear from cursor to end of screen to remove any leftover content
-        std::cout << "\033[J";  // Clear from cursor to end of screen
-      }
-      
-      // Print current command values (dynamic content)
-      std::cout << "  lin_vel_x:  " << std::fixed << std::setprecision(3) << std::setw(8) << current_lin_vel_x_ 
-                << " m/s  (max: " << max_linear_vel_ << " m/s)\n";
-      std::cout << "  lin_vel_y:  " << std::fixed << std::setprecision(3) << std::setw(8) << current_lin_vel_y_ 
-                << " m/s  (max: " << max_linear_vel_ << " m/s)\n";
-      std::cout << "  ang_vel_z:  " << std::fixed << std::setprecision(3) << std::setw(8) << current_ang_vel_z_ 
-                << " rad/s  (max: " << max_angular_vel_ << " rad/s)\n";
-      std::cout << "  height:     " << std::fixed << std::setprecision(3) << std::setw(8) << current_height_ 
-                << " m  (range: " << min_height_ << " - " << max_height_ << " m)\n";
-      std::cout << "\n";
-      std::cout.flush();  // Ensure output is displayed immediately
-    }
+    std::cout << R"(
+  -------------------------------------------------------
+  Movement Control          Height Control        Other
+
+        w                         t               
+      a s d                     g                 
+        x                         
+                                                
+  w/s: lin_vel_x    q/e: lin_vel_y    a/d: ang_vel_z    t/g: height
+  Space: stop   r: reset height   x: exit
+  -------------------------------------------------------
+  )";
+
+    std::cout << std::fixed << std::setprecision(2);
+    
+    // Print current command values with colors (matching the style of the reference code)
+    // Each value and its max/range on the same line
+    std::cout << std::setw(18-2) << "  lin_vel_x:" << std::setw(8) << MAGENTA << current_lin_vel_x_ << RESET
+              << "    max:" << std::setw(8) << RED << max_lin_vel_x_ << RESET << std::endl;
+    
+    std::cout << std::setw(18) << "  lin_vel_y:" << std::setw(8) << MAGENTA << current_lin_vel_y_ << RESET
+              << "    max:" << std::setw(8) << RED << max_lin_vel_y_ << RESET << std::endl;
+    
+    std::cout << std::setw(18) << "  ang_vel_z:" << std::setw(8) << MAGENTA << current_ang_vel_z_ << RESET
+              << "    max:" << std::setw(8) << RED << max_ang_vel_z_ << RESET << std::endl;
+    
+    std::cout << std::setw(18) << "  height:" << std::setw(8) << YELLOW << current_height_ << RESET
+              << "  range:" << std::setw(8) << CYAN << min_height_ << RESET
+              << " - " << CYAN << max_height_ << RESET << std::endl;
+    
+    std::cout << std::endl;
+    std::cout.flush();
   }
 
   void keyboardInputLoop()
@@ -299,36 +297,36 @@ private:
         // Forward/Backward
         case 'w':
         case 'W':
-          current_lin_vel_x_ = std::min(current_lin_vel_x_ + linear_vel_step_, max_linear_vel_);
+          current_lin_vel_x_ = std::min(current_lin_vel_x_ + lin_vel_x_step_, max_lin_vel_x_);
           // RCLCPP_INFO(this->get_logger(), "lin_vel_x: %.3f", current_lin_vel_x_);
           break;
         case 's':
         case 'S':
-          current_lin_vel_x_ = std::max(current_lin_vel_x_ - linear_vel_step_, -max_linear_vel_);
+          current_lin_vel_x_ = std::max(current_lin_vel_x_ - lin_vel_x_step_, -max_lin_vel_x_);
           // RCLCPP_INFO(this->get_logger(), "lin_vel_x: %.3f", current_lin_vel_x_);
           break;
 
         // Left/Right (lin_vel_y)
         case 'q':
         case 'Q':
-          current_lin_vel_y_ = std::min(current_lin_vel_y_ + linear_vel_step_, max_linear_vel_);
+          current_lin_vel_y_ = std::min(current_lin_vel_y_ + lin_vel_y_step_, max_lin_vel_y_);
           // RCLCPP_INFO(this->get_logger(), "lin_vel_y: %.3f", current_lin_vel_y_);
           break;
         case 'e':
         case 'E':
-          current_lin_vel_y_ = std::max(current_lin_vel_y_ - linear_vel_step_, -max_linear_vel_);
+          current_lin_vel_y_ = std::max(current_lin_vel_y_ - lin_vel_y_step_, -max_lin_vel_y_);
           // RCLCPP_INFO(this->get_logger(), "lin_vel_y: %.3f", current_lin_vel_y_);
           break;
 
         // Angular velocity (turn left/right)
         case 'a':
         case 'A':
-          current_ang_vel_z_ = std::min(current_ang_vel_z_ + angular_vel_step_, max_angular_vel_);
+          current_ang_vel_z_ = std::min(current_ang_vel_z_ + ang_vel_z_step_, max_ang_vel_z_);
           // RCLCPP_INFO(this->get_logger(), "ang_vel_z: %.3f", current_ang_vel_z_);
           break;
         case 'd':
         case 'D':
-          current_ang_vel_z_ = std::max(current_ang_vel_z_ - angular_vel_step_, -max_angular_vel_);
+          current_ang_vel_z_ = std::max(current_ang_vel_z_ - ang_vel_z_step_, -max_ang_vel_z_);
           // RCLCPP_INFO(this->get_logger(), "ang_vel_z: %.3f", current_ang_vel_z_);
           break;
 
@@ -486,15 +484,15 @@ private:
                       pressed_keys_['s'] > timeout_threshold;
       
       if (w_active) {
-        current_lin_vel_x_ = std::min(current_lin_vel_x_ + linear_vel_rate_ * dt, max_linear_vel_);
+        current_lin_vel_x_ = std::min(current_lin_vel_x_ + lin_vel_x_rate_ * dt, max_lin_vel_x_);
       } else if (s_active) {
-        current_lin_vel_x_ = std::max(current_lin_vel_x_ - linear_vel_rate_ * dt, -max_linear_vel_);
+        current_lin_vel_x_ = std::max(current_lin_vel_x_ - lin_vel_x_rate_ * dt, -max_lin_vel_x_);
       } else {
         // Decay to zero - key is either not pressed or has timed out
         if (current_lin_vel_x_ > 0) {
-          current_lin_vel_x_ = std::max(0.0, current_lin_vel_x_ - linear_vel_rate_ * dt);
+          current_lin_vel_x_ = std::max(0.0, current_lin_vel_x_ - lin_vel_x_rate_ * dt);
         } else if (current_lin_vel_x_ < 0) {
-          current_lin_vel_x_ = std::min(0.0, current_lin_vel_x_ + linear_vel_rate_ * dt);
+          current_lin_vel_x_ = std::min(0.0, current_lin_vel_x_ + lin_vel_x_rate_ * dt);
         }
       }
       
@@ -505,15 +503,15 @@ private:
                       pressed_keys_['e'] > timeout_threshold;
       
       if (q_active) {
-        current_lin_vel_y_ = std::min(current_lin_vel_y_ + linear_vel_rate_ * dt, max_linear_vel_);
+        current_lin_vel_y_ = std::min(current_lin_vel_y_ + lin_vel_y_rate_ * dt, max_lin_vel_y_);
       } else if (e_active) {
-        current_lin_vel_y_ = std::max(current_lin_vel_y_ - linear_vel_rate_ * dt, -max_linear_vel_);
+        current_lin_vel_y_ = std::max(current_lin_vel_y_ - lin_vel_y_rate_ * dt, -max_lin_vel_y_);
       } else {
         // Decay to zero
         if (current_lin_vel_y_ > 0) {
-          current_lin_vel_y_ = std::max(0.0, current_lin_vel_y_ - linear_vel_rate_ * dt);
+          current_lin_vel_y_ = std::max(0.0, current_lin_vel_y_ - lin_vel_y_rate_ * dt);
         } else if (current_lin_vel_y_ < 0) {
-          current_lin_vel_y_ = std::min(0.0, current_lin_vel_y_ + linear_vel_rate_ * dt);
+          current_lin_vel_y_ = std::min(0.0, current_lin_vel_y_ + lin_vel_y_rate_ * dt);
         }
       }
       
@@ -524,15 +522,15 @@ private:
                       pressed_keys_['d'] > timeout_threshold;
       
       if (a_active) {
-        current_ang_vel_z_ = std::min(current_ang_vel_z_ + angular_vel_rate_ * dt, max_angular_vel_);
+        current_ang_vel_z_ = std::min(current_ang_vel_z_ + ang_vel_z_rate_ * dt, max_ang_vel_z_);
       } else if (d_active) {
-        current_ang_vel_z_ = std::max(current_ang_vel_z_ - angular_vel_rate_ * dt, -max_angular_vel_);
+        current_ang_vel_z_ = std::max(current_ang_vel_z_ - ang_vel_z_rate_ * dt, -max_ang_vel_z_);
       } else {
         // Decay to zero
         if (current_ang_vel_z_ > 0) {
-          current_ang_vel_z_ = std::max(0.0, current_ang_vel_z_ - angular_vel_rate_ * dt);
+          current_ang_vel_z_ = std::max(0.0, current_ang_vel_z_ - ang_vel_z_rate_ * dt);
         } else if (current_ang_vel_z_ < 0) {
-          current_ang_vel_z_ = std::min(0.0, current_ang_vel_z_ + angular_vel_rate_ * dt);
+          current_ang_vel_z_ = std::min(0.0, current_ang_vel_z_ + ang_vel_z_rate_ * dt);
         }
       }
     } else {
@@ -544,9 +542,9 @@ private:
                       pressed_keys_['s'] > timeout_threshold;
       
       if (w_active) {
-        current_lin_vel_x_ = max_linear_vel_;
+        current_lin_vel_x_ = max_lin_vel_x_;
       } else if (s_active) {
-        current_lin_vel_x_ = -max_linear_vel_;
+        current_lin_vel_x_ = -max_lin_vel_x_;
       } else {
         current_lin_vel_x_ = 0.0;
       }
@@ -558,9 +556,9 @@ private:
                       pressed_keys_['e'] > timeout_threshold;
       
       if (q_active) {
-        current_lin_vel_y_ = max_linear_vel_;
+        current_lin_vel_y_ = max_lin_vel_y_;
       } else if (e_active) {
-        current_lin_vel_y_ = -max_linear_vel_;
+        current_lin_vel_y_ = -max_lin_vel_y_;
       } else {
         current_lin_vel_y_ = 0.0;
       }
@@ -572,9 +570,9 @@ private:
                       pressed_keys_['d'] > timeout_threshold;
       
       if (a_active) {
-        current_ang_vel_z_ = max_angular_vel_;
+        current_ang_vel_z_ = max_ang_vel_z_;
       } else if (d_active) {
-        current_ang_vel_z_ = -max_angular_vel_;
+        current_ang_vel_z_ = -max_ang_vel_z_;
       } else {
         current_ang_vel_z_ = 0.0;
       }
@@ -603,7 +601,7 @@ private:
     height_cmd_pub_->publish(height_msg);
     
     // Update display with current command values
-    printStatus(false);
+    printStatus();
   }
 
   void restoreTerminal()
@@ -631,16 +629,19 @@ private:
 
   // Parameters
   int control_mode_;  // 0: step mode, 1: continuous mode
-  double linear_vel_step_;
-  double angular_vel_step_;
+  double lin_vel_x_step_;
+  double lin_vel_y_step_;
+  double ang_vel_z_step_;
   double height_step_;
-  double max_linear_vel_;
-  double max_angular_vel_;
+  double max_lin_vel_x_;
+  double max_lin_vel_y_;
+  double max_ang_vel_z_;
   double min_height_;
   double max_height_;
   double default_height_;
-  double linear_vel_rate_;   // For continuous mode (m/s per second)
-  double angular_vel_rate_;  // For continuous mode (rad/s per second)
+  double lin_vel_x_rate_;   // For continuous mode (m/s per second)
+  double lin_vel_y_rate_;   // For continuous mode (m/s per second)
+  double ang_vel_z_rate_;  // For continuous mode (rad/s per second)
   bool use_rate_in_continuous_mode_;  // For mode 1: true=use rate, false=instant max speed
 
   // Continuous mode state
@@ -652,8 +653,6 @@ private:
   std::atomic<bool> running_;
   std::mutex cmd_mutex_;
 
-  // Display state
-  bool instructions_printed_{false};
 
   // Terminal settings
   struct termios old_termios_;

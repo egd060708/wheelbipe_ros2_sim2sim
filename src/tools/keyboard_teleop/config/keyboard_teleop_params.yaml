@@ -4,13 +4,15 @@
     control_mode: 1            # 控制模式：0 或 1
     
     # 速度步进值（模式0使用）
-    linear_vel_step: 0.1      # 线速度步进值 (m/s)
-    angular_vel_step: 0.1    # 角速度步进值 (rad/s)
+    lin_vel_x_step: 0.1      # x方向线速度步进值 (m/s)
+    lin_vel_y_step: 0.1      # y方向线速度步进值 (m/s)
+    ang_vel_z_step: 0.1      # z方向角速度步进值 (rad/s)
     height_step: 0.01         # 高度步进值 (m)
     
     # 速度限制
-    max_linear_vel: 1.0       # 最大线速度 (m/s)
-    max_angular_vel: 1.5     # 最大角速度 (rad/s)
+    max_lin_vel_x: 1.0       # 最大x方向线速度 (m/s)
+    max_lin_vel_y: 1.0       # 最大y方向线速度 (m/s)
+    max_ang_vel_z: 1.5       # 最大z方向角速度 (rad/s)
     
     # 高度限制
     min_height: 0.15           # 最小高度 (m)
@@ -21,8 +23,9 @@
     use_rate_in_continuous_mode: false  # true=使用速率变化（按下时按速率增长，松开时按速率归零），false=立即最大速度（按下即最大速度，松开即归零）
     
     # 速度变化速率（模式1且use_rate_in_continuous_mode=true时使用，单位：每秒的变化量）
-    linear_vel_rate: 2.0       # 线速度变化速率 (m/s per second)
-    angular_vel_rate: 2.0      # 角速度变化速率 (rad/s per second)
+    lin_vel_x_rate: 2.0       # x方向线速度变化速率 (m/s per second)
+    lin_vel_y_rate: 2.0       # y方向线速度变化速率 (m/s per second)
+    ang_vel_z_rate: 2.0       # z方向角速度变化速率 (rad/s per second)
     
     # 命名空间前缀（用于匹配控制器的命名空间，例如 "wheelbipe25_v3"）
     prefix: "wheelbipe25_v3"                        # 命名空间前缀，留空表示不使用命名空间

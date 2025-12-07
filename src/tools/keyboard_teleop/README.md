@@ -18,7 +18,7 @@
 ## 编译
 
 ```bash
-cd /home/lu/Git_Project/github/wheelbipe_ros2_sim2sim
+cd wheelbipe_ros2_sim2sim
 colcon build --packages-select keyboard_teleop
 source install/setup.bash
 ```
@@ -47,8 +47,9 @@ ros2 run keyboard_teleop keyboard_teleop_node \
   -p prefix:="wheelbipe25_v3" \
   -p control_mode:=1 \
   -p use_rate_in_continuous_mode:=true \
-  -p linear_vel_rate:=0.8 \
-  -p angular_vel_rate:=0.6
+  -p lin_vel_x_rate:=0.8 \
+  -p lin_vel_y_rate:=0.8 \
+  -p ang_vel_z_rate:=0.6
 ```
 
 **重要说明：**
@@ -107,8 +108,9 @@ ros2 launch keyboard_teleop keyboard_teleop.launch.py \
 ### 主要参数
 
 **通用参数：**
-- `max_linear_vel`: 最大线速度 (m/s)
-- `max_angular_vel`: 最大角速度 (rad/s)
+- `max_lin_vel_x`: 最大x方向线速度 (m/s)
+- `max_lin_vel_y`: 最大y方向线速度 (m/s)
+- `max_ang_vel_z`: 最大z方向角速度 (rad/s)
 - `min_height`: 最小高度 (m)
 - `max_height`: 最大高度 (m)
 - `default_height`: 初始默认高度 (m)
@@ -117,16 +119,18 @@ ros2 launch keyboard_teleop keyboard_teleop.launch.py \
 - `height_command_topic`: 高度指令话题名称
 
 **模式0（步进模式）参数：**
-- `linear_vel_step`: 线速度步进值 (m/s)
-- `angular_vel_step`: 角速度步进值 (rad/s)
+- `lin_vel_x_step`: x方向线速度步进值 (m/s)
+- `lin_vel_y_step`: y方向线速度步进值 (m/s)
+- `ang_vel_z_step`: z方向角速度步进值 (rad/s)
 - `height_step`: 高度步进值 (m)
 
 **模式1（连续模式）参数：**
 - `use_rate_in_continuous_mode`: 连续模式子选项
   - `true`: 使用速率模式（按下时按速率增长，松开时按速率归零）
   - `false`: 使用即时模式（按下即最大速度，松开即归零）
-- `linear_vel_rate`: 线速度变化速率 (m/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
-- `angular_vel_rate`: 角速度变化速率 (rad/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
+- `lin_vel_x_rate`: x方向线速度变化速率 (m/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
+- `lin_vel_y_rate`: y方向线速度变化速率 (m/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
+- `ang_vel_z_rate`: z方向角速度变化速率 (rad/s per second) - 仅在 `use_rate_in_continuous_mode=true` 时使用
 
 详细的参数说明和默认值请参考 `config/keyboard_teleop_params.yaml` 文件中的注释。
 

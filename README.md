@@ -51,6 +51,8 @@ source install/setup.bash
 
 ### 3. 运行仿真
 
+==运行ros2前需要先退出conda环境==
+
 ```bash
 source install/setup.bash
 
