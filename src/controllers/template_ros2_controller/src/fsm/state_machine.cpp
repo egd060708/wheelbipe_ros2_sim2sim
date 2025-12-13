@@ -332,6 +332,17 @@ void StateMachine::setLowlevelFrequency(double freq_hz)
   }
 }
 
+void StateMachine::setInferenceFrequency(double freq_hz)
+{
+  // 如果 StateRL 已创建，立即更新
+  if (states_.find(ControllerState::RL) != states_.end()) {
+    StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
+    if (rl_state) {
+      rl_state->setInferenceFrequency(freq_hz);
+    }
+  }
+}
+
 void StateMachine::setJointParams(const std::vector<double>& stiffness,
                                    const std::vector<double>& damping,
                                    const std::vector<double>& action_scale,

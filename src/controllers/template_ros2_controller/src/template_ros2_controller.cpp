@@ -76,6 +76,7 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
     params_.inference_timer_clock_type,
     params_.lowlevel_timer_clock_type);
   state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
+  state_machine_->setInferenceFrequency(static_cast<double>(params_.rl_inference_frequency));
   
   // 设置关节参数
   if (!params_.joint_stiffness.empty() && 
@@ -182,6 +183,7 @@ controller_interface::return_type TemplateRos2Controller::update(
         params_.inference_timer_clock_type,
         params_.lowlevel_timer_clock_type);
       state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
+      state_machine_->setInferenceFrequency(static_cast<double>(params_.rl_inference_frequency));
       // 更新关节参数
       if (!params_.joint_stiffness.empty() && 
           !params_.joint_damping.empty() && 

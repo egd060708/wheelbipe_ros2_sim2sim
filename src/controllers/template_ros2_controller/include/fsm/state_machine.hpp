@@ -95,6 +95,7 @@ public:
                        const std::string& inference_clock_type,
                        const std::string& lowlevel_clock_type);
   void setLowlevelFrequency(double freq_hz);
+  void setInferenceFrequency(double freq_hz);
   
   // 设置关节参数（传递给RL状态）
   void setJointParams(const std::vector<double>& stiffness,

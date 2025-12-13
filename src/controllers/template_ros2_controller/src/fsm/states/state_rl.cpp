@@ -71,7 +71,6 @@ StateRL::StateRL(StateMachine *state_machine, rclcpp::Logger logger)
 
 void StateRL::enter(const RobotState &robot_state, const rclcpp::Time &time) {
   (void)robot_state;
-  (void)time;
   RCLCPP_INFO(logger_, "Entering RL state");
   // 启动 RL 推理器
   if (state_machine_ && state_machine_->isRLInferenceInitialized()) {
@@ -80,6 +79,12 @@ void StateRL::enter(const RobotState &robot_state, const rclcpp::Time &time) {
 
   this->stop_update_ = false;
   this->threadRunning = true;
+  
+  // 重置推理时间（内联模式下，进入状态时立即执行第一次推理）
+  if (mode_ == 2) {
+    last_inference_time_ = time;
+    last_inference_time_initialized_ = true;
+  }
 
   // 根据模式选择调度方式
   if (mode_ == 2) {
@@ -163,6 +168,29 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     return;
   }
 
+  // 内联模式下，根据推理频率控制推理执行
+  bool should_run_inference = true;
+  if (mode_ == 2) {
+    // 检查是否需要执行推理（基于时间间隔）
+    if (!last_inference_time_initialized_) {
+      // 首次执行，初始化时间并执行推理
+      last_inference_time_ = time;
+      last_inference_time_initialized_ = true;
+    } else {
+      // 计算时间间隔
+      double time_since_last_inference = (time - last_inference_time_).seconds();
+      double inference_period = 1.0 / inference_frequency_hz_;
+      
+      if (time_since_last_inference < inference_period) {
+        // 时间间隔未达到，不执行推理
+        should_run_inference = false;
+      } else {
+        // 时间间隔达到，更新上次推理时间并执行推理
+        last_inference_time_ = time;
+      }
+    }
+  }
+
   // 准备输入数据：将机器人状态转换为模型输入
   std::vector<float> model_input;
 
@@ -211,21 +239,33 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     model_input.push_back(la);
   }
 
-  // 设置输入数据（触发推理）
-  state_machine_->setRLInput(model_input);
+  // 只有在需要执行推理时才准备输入数据
+  if (should_run_inference) {
+    // 设置输入数据（触发推理）
+    state_machine_->setRLInput(model_input);
 
-  // 获取推理输出
-  std::vector<float> model_output;
-  if (state_machine_->getRLOutput(model_output)) {
-    // 将模型输出转换为关节力矩
-    size_t output_size =
-        std::min(model_output.size(), robot_state.joints.size());
-    
-    for (size_t i = 0; i < output_size; ++i) {
-      this->desired_pos[i] = this->params_.joint_action_scale[i] *
-                                 static_cast<double>(model_output[i]) +
-                             this->params_.default_dof_pos[i];
-      this->last_actions_[i] = model_output[i];
+    // 获取推理输出
+    std::vector<float> model_output;
+    if (state_machine_->getRLOutput(model_output)) {
+      // 将模型输出转换为关节力矩
+      size_t output_size =
+          std::min(model_output.size(), robot_state.joints.size());
+      
+      for (size_t i = 0; i < output_size; ++i) {
+        this->desired_pos[i] = this->params_.joint_action_scale[i] *
+                                    static_cast<double>(model_output[i]) +
+                                this->params_.default_dof_pos[i];
+        // if (i < 4) {
+        //   this->desired_pos[i] += this->params_.joint_action_scale[i] *
+        //                             static_cast<double>(model_output[i]);
+        // }
+        // else {
+        //   this->desired_pos[i] = this->params_.joint_action_scale[i] *
+        //                             static_cast<double>(model_output[i]) +
+        //                         this->params_.default_dof_pos[i];
+        // }
+        this->last_actions_[i] = model_output[i];
+      }
     }
   }
 
@@ -282,6 +322,14 @@ void StateRL::setMode(int mode, rcl_clock_type_t clock_type, double freq_hz,
   }
 }
 
+void StateRL::setInferenceFrequency(double freq_hz) {
+  if (freq_hz > 0) {
+    inference_frequency_hz_ = freq_hz;
+    RCLCPP_INFO(logger_, "RL inference frequency set to %.1f Hz (inline mode)", 
+                inference_frequency_hz_);
+  }
+}
+
 void StateRL::setJointParams(const std::vector<double> &stiffness,
                               const std::vector<double> &damping,
                               const std::vector<double> &action_scale,
@@ -332,11 +380,12 @@ void StateRL::simplelowlevelCallbask(RobotState &robot_state,
                   (this->desired_pos[i] - robot_state.joints[i].position) +
               this->params_.joint_damping[i] * robot_state.joints[i].velocity;
         }
-      } else {
-        // 轮子关节：使用配置的damping
-        this->torque[i] =
-            this->desired_pos[i] +
-            this->params_.joint_damping[i] * robot_state.joints[i].velocity;
+        else {
+          // 轮子关节：使用配置的damping
+          this->torque[i] =
+              this->desired_pos[i] +
+              this->params_.joint_damping[i] * robot_state.joints[i].velocity;
+        }
       }
       // 使用配置的输出限制（偏置在最终输出时添加）
       if (this->torque[i] > this->params_.joint_output_max[i]) {

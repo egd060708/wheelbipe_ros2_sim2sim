@@ -3,6 +3,7 @@
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Parquetry.proto"
 
 WorldInfo {
   ERP 0.8
@@ -12,7 +13,7 @@ WorldInfo {
     ContactProperties {
       material2 "body"
       coulombFriction [
-        0.1
+        1.0
       ]
     }
     ContactProperties {
@@ -21,7 +22,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation 0.18062945469035396 0.2931342679775928 -0.9388531839619579 0.9735544442440778
-  position -2.6739473944382817 3.886808225728079 2.0506029064168962
+  position -3.7537588587926853 5.297155319857604 2.6434740865107127
 }
 TexturedBackground {
 }
@@ -29,6 +30,9 @@ TexturedBackgroundLight {
 }
 RectangleArena {
   floorSize 100 100
+  floorAppearance Parquetry {
+    type "dark strip"
+  }
 }
 Robot {
   name "Ros2Supervisor"
@@ -226,9 +230,10 @@ Robot {
                     LinearMotor {
                       name "right_spring2_joint"
                       maxVelocity 100
-                      minPosition -0.01
-                      maxPosition 0.05
+                      minPosition -0.1
+                      maxPosition 0.1
                       maxForce 500
+                      dampingConstant 0.01
                     }
                     PositionSensor {
                       name "right_spring2_joint_sensor"
@@ -630,9 +635,10 @@ Robot {
                     LinearMotor {
                       name "left_spring2_joint"
                       maxVelocity 100
-                      minPosition -0.01
-                      maxPosition 0.05
+                      minPosition -0.1
+                      maxPosition 0.1
                       maxForce 500
+                      dampingConstant 0.01
                     }
                     PositionSensor {
                       name "left_spring2_joint_sensor"

@@ -80,6 +80,9 @@ public:
                       const std::vector<double>& bias,
                       const std::vector<double>& default_dof_pos);
   
+  // 设置推理频率（用于内联模式）
+  void setInferenceFrequency(double freq_hz);
+  
   // ROS2 定时器回调函数（模式1：定时器调度）
   void onLowlevelTimer();
 
@@ -123,6 +126,11 @@ private:
   rclcpp::TimerBase::SharedPtr ros_timer_;
   long long period_microseconds_ = 0;
   long long lowlevel_period_us_ = 2000;  // 默认 500Hz
+  
+  // 推理频率控制（用于内联模式）
+  double inference_frequency_hz_ = 50.0;  // 默认 50Hz
+  rclcpp::Time last_inference_time_;  // 上次推理时间
+  bool last_inference_time_initialized_ = false;  // 是否已初始化上次推理时间
 };
 
 }  // namespace robot_locomotion
