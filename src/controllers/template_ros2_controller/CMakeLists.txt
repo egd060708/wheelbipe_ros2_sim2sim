@@ -106,34 +106,87 @@ find_library(TENSORRT_LIBRARY NAMES nvinfer
 )
 
 
+# Suppress CMake policy warning for FindCUDA
+cmake_policy(SET CMP0146 NEW)
+
+# Find CUDA - try multiple methods
 find_package(CUDA QUIET)
-if(CUDA_FOUND)
-  find_library(CUDA_RUNTIME_LIBRARY cudart
-    PATHS
-      ${CUDA_TOOLKIT_ROOT_DIR}/lib64
-      /usr/local/cuda/lib64
-      /usr/lib/x86_64-linux-gnu
-  )
+if(NOT CUDA_FOUND)
+  # Try to find CUDA by checking common installation paths
+  if(EXISTS "/usr/local/cuda")
+    set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda")
+  elseif(EXISTS "/usr/local/cuda-12.8")
+    set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.8")
+  elseif(DEFINED ENV{CUDA_PATH})
+    set(CUDA_TOOLKIT_ROOT_DIR $ENV{CUDA_PATH})
+  endif()
 endif()
 
-# Directly link to system libfmt.so.8 to avoid runtime dependency on miniconda's libfmt.so.9
+if(CUDA_TOOLKIT_ROOT_DIR)
+  # Find CUDA include directory
+  find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h
+    PATHS
+      ${CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/include
+      ${CUDA_TOOLKIT_ROOT_DIR}/include
+      /usr/local/cuda/targets/x86_64-linux/include
+      /usr/local/cuda/include
+    NO_DEFAULT_PATH
+  )
+  
+  # Find CUDA runtime library
+  find_library(CUDA_RUNTIME_LIBRARY cudart
+    PATHS
+      ${CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib
+      ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+      /usr/local/cuda/targets/x86_64-linux/lib
+      /usr/local/cuda/lib64
+      /usr/lib/x86_64-linux-gnu
+    NO_DEFAULT_PATH
+  )
+  
+  if(CUDA_INCLUDE_DIR)
+    message(STATUS "CUDA include directory found: ${CUDA_INCLUDE_DIR}")
+  endif()
+  
+  if(CUDA_RUNTIME_LIBRARY)
+    message(STATUS "CUDA runtime library found: ${CUDA_RUNTIME_LIBRARY}")
+  endif()
+endif()
+
+# Find fmt library dynamically (Ubuntu 24.04 uses libfmt.so.9)
 # Link system fmt library first, then template_ros2_controller_parameters
 # Collect all libraries to link in one call to avoid signature mismatch
 # Note: Using plain signature to match ament_auto_add_library's internal usage
+find_library(FMT_LIBRARY 
+  NAMES fmt libfmt.so.9 libfmt.so.8 libfmt.so
+  PATHS /usr/lib/x86_64-linux-gnu /usr/lib
+  NO_DEFAULT_PATH
+)
+if(NOT FMT_LIBRARY)
+  find_library(FMT_LIBRARY NAMES fmt)
+endif()
+
 set(TEMPLATE_ROS2_CONTROLLER_LIBS
-  /usr/lib/x86_64-linux-gnu/libfmt.so.8
+  ${FMT_LIBRARY}
   template_ros2_controller_parameters
 )
 
 # Link TensorRT and CUDA libraries if found
 if(TENSORRT_INCLUDE_DIR AND TENSORRT_LIBRARY)
   target_include_directories(template_ros2_controller PRIVATE ${TENSORRT_INCLUDE_DIR})
+  # Add CUDA include directory if found
+  if(CUDA_INCLUDE_DIR)
+    target_include_directories(template_ros2_controller PRIVATE ${CUDA_INCLUDE_DIR})
+  endif()
   list(APPEND TEMPLATE_ROS2_CONTROLLER_LIBS ${TENSORRT_LIBRARY})
   if(CUDA_RUNTIME_LIBRARY)
     list(APPEND TEMPLATE_ROS2_CONTROLLER_LIBS ${CUDA_RUNTIME_LIBRARY})
   endif()
   target_compile_definitions(template_ros2_controller PRIVATE TENSORRT_AVAILABLE)
   message(STATUS "TensorRT found: ${TENSORRT_LIBRARY}")
+  if(CUDA_INCLUDE_DIR)
+    message(STATUS "CUDA include directory: ${CUDA_INCLUDE_DIR}")
+  endif()
 else()
   message(WARNING "TensorRT not found. RL inference will not be available.")
 endif()
@@ -147,23 +200,14 @@ target_link_options(template_ros2_controller PRIVATE
   -Wl,--exclude-libs=ALL
 )
 target_link_libraries(template_ros2_controller 
-  /usr/lib/x86_64-linux-gnu/libfmt.so.8
   ${TEMPLATE_ROS2_CONTROLLER_LIBS}
 )
 
-# Use patchelf to fix library dependency from libfmt.so.9 to libfmt.so.8
-# This is needed because template_ros2_controller_parameters may link to miniconda's libfmt.so.9
-find_program(PATCHELF_EXECUTABLE patchelf)
-if(PATCHELF_EXECUTABLE)
-  add_custom_command(TARGET template_ros2_controller POST_BUILD
-    COMMAND ${PATCHELF_EXECUTABLE} --replace-needed libfmt.so.9 libfmt.so.8 $<TARGET_FILE:template_ros2_controller>
-    COMMENT "Fixing libfmt.so.9 dependency to libfmt.so.8"
-  )
-endif()
+# Note: patchelf step removed as we now use the system fmt library directly
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

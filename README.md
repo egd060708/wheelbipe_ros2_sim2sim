@@ -6,8 +6,8 @@ Wheelbipe 双轮机器人在 Webots 仿真环境下的 ROS 2 控制框架，支�
 
 | 组件 | 版本/说明 |
 | --- | --- |
-| 操作系统 | Ubuntu 22.04 |
-| ROS 2 | Humble Hawksbill (desktop) |
+| 操作系统 | Ubuntu 24.04 |
+| ROS 2 | Jazzy Jalisco (desktop) |
 | 仿真器 | Webots ≥ R2023a |
 | CUDA/TensorRT | CUDA 12.x + TensorRT 10.x (可选，用于 RL 推理) |
 
@@ -17,9 +17,9 @@ Wheelbipe 双轮机器人在 Webots 仿真环境下的 ROS 2 控制框架，支�
 
 ```bash
 # ROS 2 基础依赖
-sudo apt install ros-humble-desktop ros-humble-webots-ros2-driver \
-                 ros-humble-webots-ros2-control python3-colcon-common-extensions \
-                 ros-humble-xacro
+sudo apt install ros-jazzy-desktop ros-jazzy-webots-ros2-driver \
+                 ros-jazzy-webots-ros2-control python3-colcon-common-extensions \
+                 ros-jazzy-xacro
 
 # TensorRT (可选)
 sudo apt install nvidia-cuda-dev tensorrt-dev tensorrt
@@ -40,7 +40,7 @@ git clone <repository_url>
 cd wheelbipe_ros2_sim2sim
 
 # 配置环境
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 
 # 构建
 colcon build
@@ -82,7 +82,7 @@ ros2 launch template_middleware template_bring_up.launch.py \
 - 编译
 
 ```bash
-source /opt/ros/humble/setup.bash && colcon build
+source /opt/ros/jazzy/setup.bash && colcon build --symlink-install
 source install/setup.bash
 ```
 

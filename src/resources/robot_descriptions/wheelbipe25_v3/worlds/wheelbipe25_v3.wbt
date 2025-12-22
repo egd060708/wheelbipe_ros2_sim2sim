@@ -233,7 +233,6 @@ Robot {
                       minPosition -0.1
                       maxPosition 0.1
                       maxForce 500
-                      dampingConstant 0.01
                     }
                     PositionSensor {
                       name "right_spring2_joint_sensor"
@@ -638,7 +637,6 @@ Robot {
                       minPosition -0.1
                       maxPosition 0.1
                       maxForce 500
-                      dampingConstant 0.01
                     }
                     PositionSensor {
                       name "left_spring2_joint_sensor"

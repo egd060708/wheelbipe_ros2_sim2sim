@@ -213,7 +213,10 @@ controller_interface::return_type TemplateRos2Controller::update(
     
     // 3. 从 RobotState 获取输出力矩并应用到关节
     for (size_t i = 0; i < joints_.size() && i < robot_state_.joints.size(); ++i) {
-      joints_[i]->effort_command_handle->get().set_value(robot_state_.joints[i].output_torque);
+      if (!joints_[i]->effort_command_handle->get().set_value(robot_state_.joints[i].output_torque)) {
+        RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+          "Failed to set effort value for joint %zu", i);
+      }
     }
     
     // 如果关节数量不匹配，使用默认逻辑
@@ -230,9 +233,15 @@ controller_interface::return_type TemplateRos2Controller::update(
   } else {
     // 如果状态机未初始化，使用默认逻辑
     for (std::shared_ptr<Joint> joint : joints_) {
-      joint->effort_command_handle->get().set_value(0);
+      if (!joint->effort_command_handle->get().set_value(0.0)) {
+        RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+          "Failed to set effort value to 0 for joint %s", joint->name.c_str());
+      }
       if (joint->name == "left_spring2_joint" || joint->name == "right_spring2_joint") {
-        joint->effort_command_handle->get().set_value(240);
+        if (!joint->effort_command_handle->get().set_value(240.0)) {
+          RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+            "Failed to set effort value to 240.0 for joint %s", joint->name.c_str());
+        }
       }
     }
   }
@@ -243,10 +252,21 @@ controller_interface::return_type TemplateRos2Controller::update(
 void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rclcpp::Duration& period)
 {
   // 更新关节状态
+  // Note: In ROS2 Jazzy, get_value() is deprecated, use get_optional() instead
   for (size_t i = 0; i < joints_.size() && i < robot_state_.joints.size(); ++i) {
-    robot_state_.joints[i].position = joints_[i]->position_handle->get().get_value();
-    robot_state_.joints[i].velocity = joints_[i]->velocity_handle->get().get_value();
-    robot_state_.joints[i].effort = joints_[i]->effort_handle->get().get_value();
+    auto pos_opt = joints_[i]->position_handle->get().get_optional<double>();
+    auto vel_opt = joints_[i]->velocity_handle->get().get_optional<double>();
+    auto eff_opt = joints_[i]->effort_handle->get().get_optional<double>();
+    
+    if (pos_opt.has_value()) {
+      robot_state_.joints[i].position = pos_opt.value();
+    }
+    if (vel_opt.has_value()) {
+      robot_state_.joints[i].velocity = vel_opt.value();
+    }
+    if (eff_opt.has_value()) {
+      robot_state_.joints[i].effort = eff_opt.value();
+    }
   }
 
   // 更新IMU传感器状态
@@ -437,7 +457,9 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_deactivate(const
   // 清零力矩命令
   RCLCPP_INFO(get_node()->get_logger(), "on_deactivate ");
   for (uint id = 0; id < joints_.size(); id++) {
-    joints_[id]->effort_command_handle->get().set_value(0);
+    if (!joints_[id]->effort_command_handle->get().set_value(0.0)) {
+      RCLCPP_WARN(get_node()->get_logger(), "Failed to set effort value to 0 for joint %u", id);
+    }
   }
   imu_sensor_->release_interfaces();
   return controller_interface::CallbackReturn::SUCCESS;
