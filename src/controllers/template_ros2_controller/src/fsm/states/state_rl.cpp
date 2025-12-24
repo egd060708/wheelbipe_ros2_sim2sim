@@ -395,8 +395,8 @@ void StateRL::simplelowlevelCallbask(RobotState &robot_state,
         this->torque[i] = this->params_.joint_output_min[i];
       }
     }
+    last_enable_time = time.seconds();
   }
-  last_enable_time = time.seconds();
 }
 
 void StateRL::doLowlevelStep() {
