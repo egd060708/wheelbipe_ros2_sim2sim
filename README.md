@@ -72,10 +72,26 @@ ros2 launch template_middleware template_bring_up.launch.py \
 
 - rl仓库中通过play，自动完成.pt->.onnx模型文件导出
 
-- 使用tensorrt的量化器量化模型
+-- 使用 TensorRT 的量化器或本仓库提供的转换工具将 ONNX 转为 TensorRT engine
+
+**方式 A：使用 TensorRT 自带量化/转换工具 `trtexec`**
 
 ```bash
 <path_to_tensorrt>/bin/trtexec --onnx=<onnx_filename> --saveEngine=<engine_filename>
+```
+
+**方式 B：使用本仓库的 ROS 2 工具包 `onnx_to_tensorrt`**
+
+```bash
+# 仅构建转换工具包（可选）
+colcon build --packages-select onnx_to_tensorrt
+source install/setup.bash
+
+# 示例：将 jump.onnx 转为 jump.engine
+ros2 run onnx_to_tensorrt onnx_to_engine \
+  '/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/jump.onnx' \
+  '/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/jump.engine' \
+  --fp16 --max-batch 1
 ```
 
 - 修改template_ros2_controller_parameters.yaml，注意配置`rl_model_path`为本地绝对路径
@@ -109,7 +125,9 @@ src/
 ├── interfaces/webots_bridge/                 # Webots 桥接节点
 ├── middlewares/template_middleware/          # 启动文件与配置
 ├── resources/robot_descriptions/             # 机器人模型（URDF/Xacro、Webots 世界）
-└── tools/keyboard_teleop/                    # 键盘遥操作工具
+└── tools/
+    ├── keyboard_teleop/                      # 键盘遥操作工具
+    └── onnx_to_tensorrt/                     # ONNX → TensorRT engine 转换工具
 ```
 
 ## 配置说明

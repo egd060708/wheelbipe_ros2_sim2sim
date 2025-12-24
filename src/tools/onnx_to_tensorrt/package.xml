@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>onnx_to_tensorrt</name>
+  <version>0.0.1</version>
+  <description>
+    A small ROS2 tool package for converting ONNX models to TensorRT engine files.
+  </description>
+
+  <maintainer email="robotlab@example.com">SCUT Robot Lab</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- 这里只是一个命令行工具，不依赖 rclcpp -->
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
