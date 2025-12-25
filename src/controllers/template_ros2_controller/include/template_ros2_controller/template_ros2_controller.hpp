@@ -115,16 +115,26 @@ protected:
   // Motion command subscriber (using geometry_msgs/Twist for velocities and std_msgs/Float64 for height)
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr motion_cmd_subscriber_;
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr height_cmd_subscriber_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr jump_cmd_subscriber_;
   std::mutex motion_cmd_mutex_;  // Mutex for thread-safe access to command data
   double latest_lin_vel_x_;  // Latest received linear velocity in x
   double latest_lin_vel_y_;  // Latest received linear velocity in y
   double latest_ang_vel_z_;  // Latest received angular velocity in z
   double latest_height_;  // Latest received height command
+  // 跳跃指令（来自键盘/上层）
+  double last_jump_trigger_time_ = 0.0;  // 上一次触发跳跃的时间戳（秒）
+  bool jump_enabled_ = false;
+  int jump_num_phases_ = 5;
+  int jump_normal_phase_index_ = 0;
+  int jump_jump_phase_index_ = 1;
+  double jump_duration_ = 0.3;      // 跳跃保持时间（秒）
+  double jump_height_value_ = 0.05; // 跳跃高度（用于策略输入）
   bool motion_cmd_received_;  // Flag to indicate if command has been received
 
   // Motion command callbacks
   void motionCommandCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void heightCommandCallback(const std_msgs::msg::Float64::SharedPtr msg);
+  void jumpCommandCallback(const std_msgs::msg::Float64::SharedPtr msg);
 
   // 更新机器人状态数据
   void updateRobotState(const rclcpp::Time& time, const rclcpp::Duration& period);

@@ -10,7 +10,9 @@ template_ros2_controller:
       type: string,
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/parallel/model_gn.engine",
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/model_gn.engine",
-      default_value: "/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/policy.engine",
+      # default_value: "/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/parallel/model_gn.engine",
+      # default_value: "/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/policy.engine",
+      default_value: "/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/jump.engine",
       description: "Path to TensorRT engine model file for reinforcement learning inference",
     }
   rl_inference_frequency:
@@ -57,13 +59,13 @@ template_ros2_controller:
   joint_stiffness:
     {
       type: double_array,
-      default_value: [40.0, 40.0, 60.0, 60.0, 0.0, 0.0, 0.0, 0.0],
+      default_value: [10.0, 10.0, 15.0, 15.0, 0.0, 0.0, 0.0, 0.0],
       description: "Stiffness for each joint (Kp for PID control)",
     }
   joint_damping:
     {
       type: double_array,
-      default_value: [-1.0, -1.0, -1.5, -1.5, 0.0, 0.0, 0.0, 0.0],
+      default_value: [-1.0, -1.0, -2.0, -2.0, -0.1, -0.1, 0.0, 0.0],
       description: "Damping for each joint (Kd for PID control)",
     }
   joint_action_scale:
@@ -95,6 +97,12 @@ template_ros2_controller:
       type: double_array,
       default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
       description: "Default position offset for each joint (added to scaled model output)",
+    }
+  joint_armature:
+    {
+      type: double_array,
+      default_value: [0.02, 0.02, 0.02, 0.02, 0.01, 0.01, 0.0, 0.0],
+      description: "Armature (rotor inertia) for each joint",
     }
   
 # parallel control parameters

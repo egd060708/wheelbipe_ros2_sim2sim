@@ -47,6 +47,14 @@
         - effort
       sensors:
         - imu
+      # 跳跃相关参数（用于带跳跃输入的新策略）
+      jump_enabled: false
+      jump_num_phases: 5
+      jump_normal_phase_index: 0
+      jump_jump_phase_index: 1
+      jump_duration: 0.3        # Q 按下一次后保持 jump onehot=1 的持续时间(秒)
+      jump_height_value: 0.4    # 输入给策略网络的跳跃高度（与训练时保持一致）
+      jump_command_topic: "jump_command"
   
   effort_controller:
     ros__parameters:

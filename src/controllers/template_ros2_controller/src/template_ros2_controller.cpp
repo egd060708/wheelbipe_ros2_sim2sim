@@ -16,6 +16,7 @@
 // #include <template_ros2_controller/template_ros2_controller_parameters.hpp>
 #include "utils/timeMarker.h"
 #include <mutex>
+#include <algorithm>
 
 #include "pluginlib/class_list_macros.hpp"
 namespace robot_locomotion
@@ -45,6 +46,17 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   // 参数监听器初始化
   param_listener_ = std::make_shared<template_ros2_controller::ParamListener>(get_node());
   params_ = param_listener_->get_params();
+
+  // 读取跳跃相关参数（使用常规 ROS 参数，便于通过 YAML 配置）
+  // 是否启用跳跃扩展策略（仅影响部署侧是否生成 phase_onehot 与 jump_height）
+  jump_enabled_ = get_node()->declare_parameter<bool>("jump_enabled", false);
+  jump_num_phases_ = get_node()->declare_parameter<int>("jump_num_phases", 5);
+  jump_normal_phase_index_ = get_node()->declare_parameter<int>("jump_normal_phase_index", 0);
+  jump_jump_phase_index_ = get_node()->declare_parameter<int>("jump_jump_phase_index", 1);
+  jump_duration_ = get_node()->declare_parameter<double>("jump_duration", 0.3);
+  jump_height_value_ = get_node()->declare_parameter<double>("jump_height_value", 0.4);
+  std::string jump_topic =
+    get_node()->declare_parameter<std::string>("jump_command_topic", "jump_command");
   
   // Initialize time synchronization
   time_sync_enabled_ = false;  // params_.sync_time_with_webots;  // 暂时禁用
@@ -85,7 +97,8 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
       !params_.joint_output_max.empty() &&
       !params_.joint_output_min.empty() &&
       !params_.joint_bias.empty() &&
-      !params_.default_dof_pos.empty()) {
+      !params_.default_dof_pos.empty() &&
+      !params_.joint_armature.empty()) {
     state_machine_->setJointParams(
       params_.joint_stiffness,
       params_.joint_damping,
@@ -93,7 +106,8 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
       params_.joint_output_max,
       params_.joint_output_min,
       params_.joint_bias,
-      params_.default_dof_pos);
+      params_.default_dof_pos,
+      params_.joint_armature);
   }
   
   return controller_interface::CallbackReturn::SUCCESS;
@@ -127,6 +141,11 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_configure(
   latest_lin_vel_y_ = 0.0;
   latest_ang_vel_z_ = 0.0;
   latest_height_ = 0.2;  // 默认高度
+  last_jump_trigger_time_ = 0.0;
+
+  // 初始化指令中的跳跃 one-hot（默认 NORMAL 阶段）
+  robot_state_.command.jump_phase_onehot = {1.0, 0.0, 0.0, 0.0, 0.0};
+  robot_state_.command.jump_height = 0.0;
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -191,7 +210,8 @@ controller_interface::return_type TemplateRos2Controller::update(
           !params_.joint_output_max.empty() &&
           !params_.joint_output_min.empty() &&
           !params_.joint_bias.empty() &&
-          !params_.default_dof_pos.empty()) {
+          !params_.default_dof_pos.empty() &&
+          !params_.joint_armature.empty()) {
         state_machine_->setJointParams(
           params_.joint_stiffness,
           params_.joint_damping,
@@ -199,7 +219,8 @@ controller_interface::return_type TemplateRos2Controller::update(
           params_.joint_output_max,
           params_.joint_output_min,
           params_.joint_bias,
-          params_.default_dof_pos);
+          params_.default_dof_pos,
+          params_.joint_armature);
       }
     }
   }
@@ -298,13 +319,40 @@ void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rc
     robot_state_.command.cmd_vel[1] = latest_lin_vel_y_;
     robot_state_.command.cmd_vel[2] = latest_ang_vel_z_;
     robot_state_.command.cmd_height = latest_height_;
-    
+
+    // 计算跳跃 phase_onehot 与 jump_height（与训练时的 phase_onehot / jump_height 对齐）
+    if (jump_enabled_) {
+      const double now = time.seconds();
+      const double dt = now - last_jump_trigger_time_;
+      const bool jump_active = (dt >= 0.0) && (dt <= jump_duration_);
+
+      // 安全限制索引
+      const int num_phases = static_cast<int>(robot_state_.command.jump_phase_onehot.size());
+      const int normal_idx = std::clamp(jump_normal_phase_index_, 0, num_phases - 1);
+      const int jump_idx = std::clamp(jump_jump_phase_index_, 0, num_phases - 1);
+
+      // 清零并设置 one-hot
+      robot_state_.command.jump_phase_onehot.fill(0.0);
+      if (jump_active) {
+        robot_state_.command.jump_phase_onehot[jump_idx] = 1.0;
+        robot_state_.command.jump_height = jump_height_value_;
+      } else {
+        robot_state_.command.jump_phase_onehot[normal_idx] = 1.0;
+        robot_state_.command.jump_height = 0.0;
+      }
+    } else {
+      // 未启用跳跃时，保持 NORMAL 阶段且高度为 0
+      robot_state_.command.jump_phase_onehot = {1.0, 0.0, 0.0, 0.0, 0.0};
+      robot_state_.command.jump_height = 0.0;
+    }
+
     // 定期打印命令值（每100次更新打印一次，约0.2秒一次）
     static int debug_counter = 0;
     if (++debug_counter % 100 == 0) {
       RCLCPP_DEBUG(get_node()->get_logger(),
-        "Current command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f, height=%.3f, received=%d",
-        latest_lin_vel_x_, latest_lin_vel_y_, latest_ang_vel_z_, latest_height_, motion_cmd_received_);
+        "Current command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f, height=%.3f, jump_h=%.3f, received=%d",
+        latest_lin_vel_x_, latest_lin_vel_y_, latest_ang_vel_z_,
+        latest_height_, robot_state_.command.jump_height, motion_cmd_received_);
     }
   }
 
@@ -333,12 +381,29 @@ void TemplateRos2Controller::heightCommandCallback(
   RCLCPP_INFO(get_node()->get_logger(), "Received height command: %.3f", msg->data);
 }
 
+void TemplateRos2Controller::jumpCommandCallback(
+  const std_msgs::msg::Float64::SharedPtr msg)
+{
+  if (!jump_enabled_) {
+    return;
+  }
+  // 约定：msg->data > 0 触发一次跳跃
+  if (msg->data > 0.0) {
+    std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
+    // 使用当前 ROS 时间作为触发时间
+    last_jump_trigger_time_ = get_node()->get_clock()->now().seconds();
+    RCLCPP_INFO(get_node()->get_logger(), "Jump command triggered, timestamp=%.3f",
+      last_jump_trigger_time_);
+  }
+}
+
 // 从失能状态到激活状态
 controller_interface::CallbackReturn TemplateRos2Controller::on_activate(const rclcpp_lifecycle::State &)
 {
   // 创建运动指令话题订阅者
   std::string motion_topic = "motion_command";
   std::string height_topic = "height_command";
+  std::string jump_topic = get_node()->get_parameter("jump_command_topic").as_string();
   
   motion_cmd_subscriber_ = get_node()->create_subscription<geometry_msgs::msg::Twist>(
     motion_topic, 10,
@@ -346,15 +411,20 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_activate(const r
   height_cmd_subscriber_ = get_node()->create_subscription<std_msgs::msg::Float64>(
     height_topic, 10,
     std::bind(&TemplateRos2Controller::heightCommandCallback, this, std::placeholders::_1));
+  // 跳跃触发订阅（例如来自键盘 Q 键）
+  jump_cmd_subscriber_ = get_node()->create_subscription<std_msgs::msg::Float64>(
+    jump_topic, 10,
+    std::bind(&TemplateRos2Controller::jumpCommandCallback, this, std::placeholders::_1));
   
   // 获取节点的完整话题名称（包括命名空间）
   std::string node_namespace = get_node()->get_namespace();
   RCLCPP_INFO(get_node()->get_logger(), 
     "Motion command subscribers created. Node namespace: '%s'", node_namespace.c_str());
   RCLCPP_INFO(get_node()->get_logger(), 
-    "Subscribing to topics: '%s' (full: '%s'), '%s' (full: '%s')",
+    "Subscribing to topics: '%s' (full: '%s'), '%s' (full: '%s'), '%s' (full: '%s')",
     motion_topic.c_str(), motion_cmd_subscriber_->get_topic_name(),
-    height_topic.c_str(), height_cmd_subscriber_->get_topic_name());
+    height_topic.c_str(), height_cmd_subscriber_->get_topic_name(),
+    jump_topic.c_str(), jump_cmd_subscriber_->get_topic_name());
 
   // 查找并绑定关节命令接口
   RCLCPP_INFO(get_node()->get_logger(), "on_activate");

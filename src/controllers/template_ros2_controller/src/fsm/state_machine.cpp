@@ -69,7 +69,8 @@ void StateMachine::update(RobotState& robot_state, const rclcpp::Time& time, con
 
   // 处理状态转换
   ControllerState next_state = handleStateTransition(robot_state, time);
-  
+  // RCLCPP_INFO(logger_, "Current State: %s",
+  //   getStateName(current_state_).c_str());
   // 如果状态发生变化，执行状态切换
   if (next_state != current_state_) {
     changeState(next_state, robot_state, time);
@@ -349,13 +350,14 @@ void StateMachine::setJointParams(const std::vector<double>& stiffness,
                                    const std::vector<double>& output_max,
                                    const std::vector<double>& output_min,
                                    const std::vector<double>& bias,
-                                   const std::vector<double>& default_dof_pos)
+                                   const std::vector<double>& default_dof_pos,
+                                   const std::vector<double>& armature)
 {
   // 传递给 RL 状态
   if (states_.find(ControllerState::RL) != states_.end()) {
     StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
     if (rl_state) {
-      rl_state->setJointParams(stiffness, damping, action_scale, output_max, output_min, bias, default_dof_pos);
+      rl_state->setJointParams(stiffness, damping, action_scale, output_max, output_min, bias, default_dof_pos, armature);
     }
   }
 }

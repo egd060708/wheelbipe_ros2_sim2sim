@@ -65,6 +65,9 @@ public:
   // 检查推理线程是否运行
   bool isRunning() const { return running_; }
 
+  // 获取输入张量中 float 元素的个数（用于根据模型自动推断观测维度）
+  size_t getInputElementCount() const { return input_size_ / sizeof(float); }
+
   // 设置调度模式：0=线程(系统时间)，1=ROS2定时器，2=内联
   // 可选择定时器的时钟类型
   void setMode(int mode, rcl_clock_type_t clock_type,

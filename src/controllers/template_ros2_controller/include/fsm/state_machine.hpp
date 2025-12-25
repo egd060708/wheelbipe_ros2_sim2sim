@@ -104,7 +104,8 @@ public:
                       const std::vector<double>& output_max,
                       const std::vector<double>& output_min,
                       const std::vector<double>& bias,
-                      const std::vector<double>& default_dof_pos);
+                      const std::vector<double>& default_dof_pos,
+                      const std::vector<double>& armature);
 
   // TensorRT 推理器（用于 RL 状态）
   std::unique_ptr<TensorRTInference> rl_inference_;

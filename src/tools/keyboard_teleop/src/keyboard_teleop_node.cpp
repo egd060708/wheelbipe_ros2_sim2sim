@@ -15,6 +15,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/empty.hpp>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -62,6 +63,8 @@ public:
     this->declare_parameter<std::string>("prefix", "");
     this->declare_parameter<std::string>("motion_command_topic", "motion_command");
     this->declare_parameter<std::string>("height_command_topic", "height_command");
+    this->declare_parameter<std::string>("jump_command_topic", "jump_command");
+    this->declare_parameter<std::string>("reload_command_topic", "reload_robot");
 
     // Get parameters
     control_mode_ = this->get_parameter("control_mode").as_int();
@@ -82,6 +85,8 @@ public:
     std::string prefix = this->get_parameter("prefix").as_string();
     std::string motion_topic = this->get_parameter("motion_command_topic").as_string();
     std::string height_topic = this->get_parameter("height_command_topic").as_string();
+    std::string jump_topic = this->get_parameter("jump_command_topic").as_string();
+    std::string reload_topic = this->get_parameter("reload_command_topic").as_string();
     
     // Validate control mode
     if (control_mode_ != 0 && control_mode_ != 1) {
@@ -111,18 +116,24 @@ public:
       }
       motion_topic = prefix + "/" + motion_topic;
       height_topic = prefix + "/" + height_topic;
+      jump_topic = prefix + "/" + jump_topic;
+      reload_topic = prefix + "/" + reload_topic;
       RCLCPP_INFO(this->get_logger(), 
-        "Using namespace prefix: '%s'. Topics: '%s', '%s'",
-        prefix.c_str(), motion_topic.c_str(), height_topic.c_str());
+        "Using namespace prefix: '%s'. Topics: '%s', '%s', '%s', '%s'",
+        prefix.c_str(), motion_topic.c_str(), height_topic.c_str(), jump_topic.c_str(),
+        reload_topic.c_str());
     }
 
     // Create publishers
     motion_cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(motion_topic, 10);
     height_cmd_pub_ = this->create_publisher<std_msgs::msg::Float64>(height_topic, 10);
+    jump_cmd_pub_ = this->create_publisher<std_msgs::msg::Float64>(jump_topic, 10);
+    reload_cmd_pub_ = this->create_publisher<std_msgs::msg::Empty>(reload_topic, 10);
     
     RCLCPP_INFO(this->get_logger(), 
-      "Publishing to topics: '%s', '%s'",
-      motion_cmd_pub_->get_topic_name(), height_cmd_pub_->get_topic_name());
+      "Publishing to topics: '%s', '%s', '%s', '%s'",
+      motion_cmd_pub_->get_topic_name(), height_cmd_pub_->get_topic_name(),
+      jump_cmd_pub_->get_topic_name(), reload_cmd_pub_->get_topic_name());
 
     // Initialize command values
     current_lin_vel_x_ = 0.0;
@@ -193,7 +204,7 @@ private:
         x                         
                                                 
   w/s: lin_vel_x    q/e: lin_vel_y    a/d: ang_vel_z    t/g: height
-  Space: stop   r: reset height   x: exit
+  Space: stop   r: reset height   j: jump   l: reload robot   x: exit
   -------------------------------------------------------
   )";
 
@@ -349,6 +360,17 @@ private:
           current_ang_vel_z_ = 0.0;
           // RCLCPP_INFO(this->get_logger(), "Stopped all motion");
           break;
+        // 触发跳跃（不改变任何速度状态）
+        case 'j':
+        case 'J':
+          triggerJump();
+          break;
+        // TODO: 未实现
+        // 触发 Webots 机器人重载（发布一个 Empty 消息）
+        case 'l':
+        case 'L':
+          triggerReload();
+          break;
 
         // Reset height
         case 'r':
@@ -405,6 +427,19 @@ private:
         case 'd':
         case 'D':
           pressed_keys_['d'] = now;
+          // Don't remove other keys - allow simultaneous presses
+          break;
+
+        // 触发跳跃（不改变任何速度状态）
+        case 'j':
+        case 'J':
+          triggerJump();
+          // Don't remove other keys - allow simultaneous presses
+          break;
+        // 触发 Webots 机器人重载（发布一个 Empty 消息）
+        case 'l':
+        case 'L':
+          triggerReload();
           // Don't remove other keys - allow simultaneous presses
           break;
 
@@ -616,6 +651,8 @@ private:
   // Publishers
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr motion_cmd_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr height_cmd_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr jump_cmd_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr reload_cmd_pub_;
 
   // Timer
   rclcpp::TimerBase::SharedPtr publish_timer_;
@@ -657,6 +694,27 @@ private:
   // Terminal settings
   struct termios old_termios_;
   std::atomic<bool> old_termios_set_{false};
+
+  // 触发一次跳跃（发布简单的 Float64=1.0 信号）
+  void triggerJump()
+  {
+    if (!jump_cmd_pub_) {
+      return;
+    }
+    std_msgs::msg::Float64 msg;
+    msg.data = 1.0;
+    jump_cmd_pub_->publish(msg);
+  }
+
+  // 触发一次 Webots 机器人重载（发布 Empty 消息）
+  void triggerReload()
+  {
+    if (!reload_cmd_pub_) {
+      return;
+    }
+    std_msgs::msg::Empty msg;
+    reload_cmd_pub_->publish(msg);
+  }
 };
 
 int main(int argc, char ** argv)

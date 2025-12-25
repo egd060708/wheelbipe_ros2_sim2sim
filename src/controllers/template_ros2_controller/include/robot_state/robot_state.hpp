@@ -53,11 +53,16 @@ struct GeneralizedState
   RotMat<double> rotation_w2b;// 世界系转到机身系的旋转矩阵
 };
 
-// 指令
+// 指令（包含速度指令、高度指令以及跳跃相关指令）
 struct Command
 {
   std::array<double, 3> cmd_vel = {0.0, 0.0, 0.0};  // 速度指令
-  double cmd_height = 0;              // 高度指令
+  double cmd_height = 0.0;                             // 高度指令
+  // 跳跃阶段 one-hot（例如：0-NORMAL，其余为不同跳跃阶段）
+  // 这里固定为 5 维，对应训练时的 phase_onehot 维度
+  std::array<double, 5> jump_phase_onehot = {1.0, 0.0, 0.0, 0.0, 0.0};
+  // 跳跃高度（作为策略观察的一部分）
+  double jump_height = 0.0;
 };
 
 // 机器人状态数据结构（暴露给状态机）

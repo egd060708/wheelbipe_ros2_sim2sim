@@ -39,6 +39,7 @@ struct ModelParams
     float joint_output_min[8] = {0};
     float joint_bias[8] = {0};  // 偏置输出力矩
     float default_dof_pos[8] = {0};
+    float joint_armature[8] = {0};  // 转子惯量
     
     // 其他参数
     float ang_vel_scale;
@@ -78,7 +79,8 @@ public:
                       const std::vector<double>& output_max,
                       const std::vector<double>& output_min,
                       const std::vector<double>& bias,
-                      const std::vector<double>& default_dof_pos);
+                      const std::vector<double>& default_dof_pos,
+                      const std::vector<double>& armature);
   
   // 设置推理频率（用于内联模式）
   void setInferenceFrequency(double freq_hz);
@@ -131,6 +133,10 @@ private:
   double inference_frequency_hz_ = 50.0;  // 默认 50Hz
   rclcpp::Time last_inference_time_;  // 上次推理时间
   bool last_inference_time_initialized_ = false;  // 是否已初始化上次推理时间
+
+  // 模型输入维度信息（用于自动区分旧策略/带跳跃新策略）
+  bool model_input_dim_initialized_ = false;
+  int model_input_extra_dim_ = 0;  // 例如 0=旧策略，6=phase_onehot(5)+jump_height(1)
 };
 
 }  // namespace robot_locomotion

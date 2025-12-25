@@ -2,9 +2,9 @@
 /**:
   controller_manager:
     ros__parameters:
-      update_rate: 500  # Hz
+      update_rate: 500 # Hz
       # is_async: true
-          
+
       joint_state_broadcaster:
         type: joint_state_broadcaster/JointStateBroadcaster
       imu_sensor_broadcaster:
@@ -16,16 +16,16 @@
 
   imu_sensor_broadcaster:
     ros__parameters:
-      update_rate: 500  # Hz
+      update_rate: 500 # Hz
       sensor_name: imu
-      frame_id:  imu
+      frame_id: imu
   joint_state_broadcaster:
     ros__parameters:
-      update_rate: 500  # Hz
+      update_rate: 500 # Hz
 
   template_ros2_controller:
     ros__parameters:
-      update_rate: 500  # Hz
+      update_rate: 500 # Hz
       joints:
         - left_rear1_joint
         - right_rear1_joint
@@ -45,7 +45,15 @@
         - effort
       sensors:
         - imu
-  
+      # 跳跃相关参数（用于带跳跃输入的新策略）
+      jump_enabled: true
+      jump_num_phases: 5
+      jump_normal_phase_index: 0
+      jump_jump_phase_index: 1
+      jump_duration: 0.15 # Q 按下一次后保持 jump onehot=1 的持续时间(秒)
+      jump_height_value: 0.4 # 输入给策略网络的跳跃高度（与训练时保持一致）
+      jump_command_topic: "jump_command"
+
   effort_controller:
     ros__parameters:
       joints:
