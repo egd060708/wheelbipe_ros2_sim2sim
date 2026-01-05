@@ -10,7 +10,7 @@ template_ros2_controller:
       type: string,
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/parallel/model_gn.engine",
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/model_gn.engine",
-      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_direct/2025-12-10_17-04-19/exported/model_gn.engine",
+      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_flat_direct/2026-01-04_19-21-59/exported/model_gn14000.engine",
       description: "Path to TensorRT engine model file for reinforcement learning inference",
     }
   rl_inference_frequency:
@@ -107,7 +107,7 @@ template_ros2_controller:
   joint_damping:
     {
       type: double_array,
-      default_value: [-1.0, -1.0, -1.0, -1.0, -0.01, -0.01, 0.0, 0.0],
+      default_value: [-1.0, -1.0, -1.0, -1.0, -0.1, -0.1, 0.0, 0.0],
       description: "Damping for each joint (Kd for PID control)",
     }
   joint_action_scale:
@@ -119,13 +119,13 @@ template_ros2_controller:
   joint_output_max:
     {
       type: double_array,
-      default_value: [39.9, 39.9, 39.9, 39.9, 4.99, 4.99, 500.0, 500.0],
+      default_value: [39.9, 39.9, 39.9, 39.9, 6.99, 6.99, 500.0, 500.0],
       description: "Maximum output torque for each joint",
     }
   joint_output_min:
     {
       type: double_array,
-      default_value: [-39.9, -39.9, -39.9, -39.9, -4.99, -4.99, -500.0, -500.0],
+      default_value: [-39.9, -39.9, -39.9, -39.9, -6.99, -6.99, -500.0, -500.0],
       description: "Minimum output torque for each joint",
     }
   joint_bias:
