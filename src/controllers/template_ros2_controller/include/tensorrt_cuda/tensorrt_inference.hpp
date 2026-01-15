@@ -45,7 +45,14 @@ public:
   ~TensorRTInference();
 
   // 初始化：加载 TensorRT engine 模型
-    bool initialize(const std::string &engine_model_path, int inference_frequency_hz);
+  bool initialize(const std::string &engine_model_path, int inference_frequency_hz);
+
+  // （可选）在创建执行上下文之前手动指定张量名称。
+  // 传入空字符串表示该项仍由自动探测逻辑决定。
+  void setTensorNames(const std::string &input_name,
+                      const std::string &actions_name,
+                      const std::string &lin_vel_name,
+                      const std::string &height_name);
 
   // 启动推理线程
   void start();
@@ -96,26 +103,34 @@ private:
 
   // TensorRT 对象
 #ifdef TENSORRT_AVAILABLE
-    nvinfer1::IRuntime *runtime_;
-    nvinfer1::ICudaEngine *engine_;
-    nvinfer1::IExecutionContext *context_;
+  nvinfer1::IRuntime *runtime_;
+  nvinfer1::ICudaEngine *engine_;
+  nvinfer1::IExecutionContext *context_;
 #else
-    void *runtime_;
-    void *engine_;
-    void *context_;
+  void *runtime_;
+  void *engine_;
+  void *context_;
 #endif
 
   // CUDA 缓冲区
-    void *input_buffer_;
-    void *output_buffer_;
+  void *input_buffer_;
+  // 新模型有三个输出张量：actions, lin_vel, height
+  void *output_actions_buffer_;
+  void *output_lin_vel_buffer_;
+  void *output_height_buffer_;
   size_t input_size_;
-  size_t output_size_;
+  size_t output_actions_size_;
+  size_t output_lin_vel_size_;
+  size_t output_height_size_;
   int input_binding_index_;
   int output_binding_index_;
   
   // TensorRT 10: 使用张量名称而不是绑定索引
   std::string input_tensor_name_;
-  std::string output_tensor_name_;
+  // 多输出张量名称
+  std::string output_actions_name_;
+  std::string output_lin_vel_name_;
+  std::string output_height_name_;
 
   // 线程控制
   std::thread inference_thread_;
@@ -136,11 +151,11 @@ private:
 #ifdef TENSORRT_AVAILABLE
   cudaStream_t cuda_stream_;
 #else
-    void *cuda_stream_;
+  void *cuda_stream_;
 #endif
 
-    // 用于记录上次执行时间（用于时间间隔统计）
-    std::chrono::steady_clock::time_point last_execution_time_;
+  // 用于记录上次执行时间（用于时间间隔统计）
+  std::chrono::steady_clock::time_point last_execution_time_;
 
   // 调度模式与时钟
   std::atomic<int> mode_;

@@ -216,7 +216,10 @@ void StateMachine::reset()
   }
 }
 
-bool StateMachine::initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz)
+bool StateMachine::initializeRLInference(
+  const std::string& engine_model_path, int inference_frequency_hz,
+  const std::string& input_tensor_name,
+  const std::string& output_tensor_name)
 {
   if (rl_inference_) {
     RCLCPP_WARN(logger_, "RL inference already initialized");
@@ -224,6 +227,12 @@ bool StateMachine::initializeRLInference(const std::string& engine_model_path, i
   }
 
   rl_inference_ = std::make_unique<TensorRTInference>(logger_);
+  // 在真正初始化前先设置期望的张量名称（如果为空则保持自动探测）
+  rl_inference_->setTensorNames(
+    input_tensor_name,
+    output_tensor_name,
+    "",   // lin_vel 仍然自动探测
+    "");  // height 仍然自动探测
   if (!rl_inference_->initialize(engine_model_path, inference_frequency_hz)) {
     RCLCPP_ERROR(logger_, "Failed to initialize RL inference");
     rl_inference_.reset();

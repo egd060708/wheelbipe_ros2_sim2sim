@@ -67,7 +67,10 @@ public:
   void reset();
 
   // 初始化 RL 推理器（只初始化，不启动）
-  bool initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz);
+  // 只从外部配置输入张量名和“主输出”张量名（通常为 actions），其他输出自动探测
+  bool initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz,
+                             const std::string& input_tensor_name = "",
+                             const std::string& output_tensor_name = "");
 
   // 启动 RL 推理器（在进入 RL 状态时调用）
   void startRLInference();

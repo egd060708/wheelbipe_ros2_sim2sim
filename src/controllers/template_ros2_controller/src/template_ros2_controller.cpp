@@ -56,7 +56,10 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   // 初始化 RL 推理器（如果模型路径已配置）
   if (!params_.rl_model_path.empty()) {
     if (state_machine_->initializeRLInference(
-        params_.rl_model_path, params_.rl_inference_frequency)) {
+        params_.rl_model_path,
+        params_.rl_inference_frequency,
+        params_.rl_input_name,
+        params_.rl_output_name)) {
       RCLCPP_INFO(get_node()->get_logger(), 
         "RL inference initialized in on_init with model: %s, frequency: %ld Hz",
         params_.rl_model_path.c_str(), static_cast<long>(params_.rl_inference_frequency));
