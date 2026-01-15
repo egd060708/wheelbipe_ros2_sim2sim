@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TEMPLATE_ROS2_CONTROLLER__TENSORRT_INFERENCE_HPP_
-#define TEMPLATE_ROS2_CONTROLLER__TENSORRT_INFERENCE_HPP_
+#ifndef TEMPLATE_ROS2_CONTROLLER__ONNXRUNTIME_INFERENCE_HPP_
+#define TEMPLATE_ROS2_CONTROLLER__ONNXRUNTIME_INFERENCE_HPP_
 
 #include <string>
 #include <vector>
@@ -28,26 +28,26 @@
 #include "rcl/time.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-// TensorRT includes (conditional compilation)
-#ifdef TENSORRT_AVAILABLE
-#include <NvInfer.h>
+// ONNX Runtime includes (conditional compilation)
+#ifdef ONNXRUNTIME_AVAILABLE
+#include <onnxruntime_cxx_api.h>
 #include <cuda_runtime.h>
 #endif
 
 namespace robot_locomotion
 {
 
-// TensorRT 推理引擎类
-class TensorRTInference
+// ONNX Runtime 推理引擎类（接口与 TensorRTInference 保持一致）
+class ONNXRuntimeInference
 {
 public:
-  TensorRTInference(rclcpp::Logger logger);
-  ~TensorRTInference();
+  ONNXRuntimeInference(rclcpp::Logger logger);
+  ~ONNXRuntimeInference();
 
-  // 初始化：加载 TensorRT engine 模型
-    bool initialize(const std::string &engine_model_path, int inference_frequency_hz);
+  // 初始化：加载 ONNX 模型
+  bool initialize(const std::string &model_path, int inference_frequency_hz, bool use_cuda = false);
 
-  // （可选）在创建执行上下文之前手动指定张量名称。
+  // （可选）在创建 session 之前手动指定张量名称。
   // 传入空字符串表示该项仍由自动探测逻辑决定。
   void setTensorNames(const std::string &input_name,
                       const std::string &actions_name,
@@ -61,10 +61,10 @@ public:
   void stop();
 
   // 设置输入数据（线程安全）
-    void setInput(const std::vector<float> &input_data);
+  void setInput(const std::vector<float> &input_data);
 
   // 获取输出数据（线程安全）
-    bool getOutput(std::vector<float> &output_data);
+  bool getOutput(std::vector<float> &output_data);
 
   // 检查是否已初始化
   bool isInitialized() const { return initialized_; }
@@ -81,12 +81,12 @@ public:
   void inferenceCallback();
 
 private:
-  // TensorRT 相关
-    bool loadEngineFromFile(const std::string &engine_model_path);
-  bool createExecutionContext();
-  void destroyEngine();
+  // ONNX Runtime 相关
+  bool loadModelFromFile(const std::string &model_path);
+  bool createSession();
+  void destroySession();
 
-  // CUDA 相关
+  // CUDA 相关（如果使用 GPU）
   bool allocateBuffers();
   void freeBuffers();
 
@@ -97,40 +97,49 @@ private:
   rclcpp::Logger logger_;
 
   // 模型信息
-  std::string engine_model_path_;
+  std::string model_path_;
   int inference_frequency_hz_;
   std::chrono::milliseconds inference_period_ms_;
 
-  // TensorRT 对象
-#ifdef TENSORRT_AVAILABLE
-    nvinfer1::IRuntime *runtime_;
-    nvinfer1::ICudaEngine *engine_;
-    nvinfer1::IExecutionContext *context_;
+  // ONNX Runtime 对象
+#ifdef ONNXRUNTIME_AVAILABLE
+  std::unique_ptr<Ort::Env> env_;
+  std::unique_ptr<Ort::Session> session_;
+  Ort::SessionOptions session_options_;
+  Ort::MemoryInfo memory_info_cpu_{nullptr};  // 初始化为 nullptr，在 createSession 中初始化
+  Ort::MemoryInfo memory_info_gpu_{nullptr};  // 初始化为 nullptr，在 createSession 中初始化
+  bool use_cuda_;
+  int cuda_device_id_;
 #else
-    void *runtime_;
-    void *engine_;
-    void *context_;
+  void *env_;
+  void *session_;
+  bool use_cuda_;
+  int cuda_device_id_;
 #endif
 
-  // CUDA 缓冲区
-    void *input_buffer_;
-  // 新模型有三个输出张量：actions, lin_vel, height
-  void *output_actions_buffer_;
-  void *output_lin_vel_buffer_;
-  void *output_height_buffer_;
+  // 输入输出张量名称
+  std::string input_tensor_name_;
+  std::string output_actions_name_;
+  std::string output_lin_vel_name_;
+  std::string output_height_name_;
+
+  // 输入输出形状信息
+  std::vector<int64_t> input_shape_;
+  std::vector<int64_t> output_actions_shape_;
+  std::vector<int64_t> output_lin_vel_shape_;
+  std::vector<int64_t> output_height_shape_;
+
+  // 输入输出大小（元素个数）
   size_t input_size_;
   size_t output_actions_size_;
   size_t output_lin_vel_size_;
   size_t output_height_size_;
-  int input_binding_index_;
-  int output_binding_index_;
-  
-  // TensorRT 10: 使用张量名称而不是绑定索引
-  std::string input_tensor_name_;
-  // 多输出张量名称
-  std::string output_actions_name_;
-  std::string output_lin_vel_name_;
-  std::string output_height_name_;
+
+  // CUDA 缓冲区（如果使用 GPU）
+  void *input_buffer_gpu_;
+  void *output_actions_buffer_gpu_;
+  void *output_lin_vel_buffer_gpu_;
+  void *output_height_buffer_gpu_;
 
   // 线程控制
   std::thread inference_thread_;
@@ -147,15 +156,15 @@ private:
   std::atomic<bool> output_ready_;
   std::atomic<bool> new_input_available_;
 
-  // CUDA 流
-#ifdef TENSORRT_AVAILABLE
+  // CUDA 流（如果使用 GPU）
+#ifdef ONNXRUNTIME_AVAILABLE
   cudaStream_t cuda_stream_;
 #else
-    void *cuda_stream_;
+  void *cuda_stream_;
 #endif
 
-    // 用于记录上次执行时间（用于时间间隔统计）
-    std::chrono::steady_clock::time_point last_execution_time_;
+  // 用于记录上次执行时间（用于时间间隔统计）
+  std::chrono::steady_clock::time_point last_execution_time_;
 
   // 调度模式与时钟
   std::atomic<int> mode_;
@@ -166,6 +175,8 @@ private:
   rclcpp::TimerBase::SharedPtr ros_timer_;
   int64_t period_nanoseconds_;
 };
+
 } // namespace robot_locomotion
 
-#endif // TEMPLATE_ROS2_CONTROLLER__TENSORRT_INFERENCE_HPP_
+#endif // TEMPLATE_ROS2_CONTROLLER__ONNXRUNTIME_INFERENCE_HPP_
+

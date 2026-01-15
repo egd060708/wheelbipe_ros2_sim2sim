@@ -18,6 +18,7 @@
 #include "fsm/states/state_idle.hpp"
 #include "fsm/states/state_rl.hpp"
 #include "tensorrt_cuda/tensorrt_inference.hpp"
+#include "onnxruntime_cuda/onnxruntime_inference.hpp"
 #include "robot_state/robot_state.hpp"
 #include "rclcpp/clock.hpp"
 #include "rcl/time.h"
@@ -30,11 +31,12 @@ StateMachine::StateMachine(rclcpp::Logger logger, rclcpp_lifecycle::LifecycleNod
   , target_state_(ControllerState::IDLE)
   , logger_(logger)
   , node_(node)
+  , state_entry_time_(rclcpp::Time(0, 0, RCL_ROS_TIME))
   , num_joints_(0)
   , first_update_(true)
+  , inference_backend_(InferenceBackend::TENSORRT)  // 在 current_state_obj_ 之前初始化
   , current_state_obj_(nullptr)
 {
-  state_entry_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
   initializeStates();
   // 设置初始状态对象（不在这里调用 enter，在第一次 update 时调用）
   if (states_.find(ControllerState::INIT) != states_.end()) {
@@ -217,80 +219,153 @@ void StateMachine::reset()
 }
 
 bool StateMachine::initializeRLInference(
-  const std::string& engine_model_path, int inference_frequency_hz,
+  const std::string& model_path, int inference_frequency_hz,
+  InferenceBackend backend,
   const std::string& input_tensor_name,
-  const std::string& output_tensor_name)
+  const std::string& output_tensor_name,
+  bool use_cuda)
 {
-  if (rl_inference_) {
-    RCLCPP_WARN(logger_, "RL inference already initialized");
-    return true;
-  }
+  inference_backend_ = backend;
 
-  rl_inference_ = std::make_unique<TensorRTInference>(logger_);
-  // 在真正初始化前先设置期望的张量名称（如果为空则保持自动探测）
-  rl_inference_->setTensorNames(
-    input_tensor_name,
-    output_tensor_name,
-    "",   // lin_vel 仍然自动探测
-    "");  // height 仍然自动探测
-  if (!rl_inference_->initialize(engine_model_path, inference_frequency_hz)) {
-    RCLCPP_ERROR(logger_, "Failed to initialize RL inference");
-    rl_inference_.reset();
+  if (backend == InferenceBackend::TENSORRT) {
+    if (rl_inference_tensorrt_) {
+      RCLCPP_WARN(logger_, "TensorRT inference already initialized");
+      return true;
+    }
+
+    rl_inference_tensorrt_ = std::make_unique<TensorRTInference>(logger_);
+    // 在真正初始化前先设置期望的张量名称（如果为空则保持自动探测）
+    rl_inference_tensorrt_->setTensorNames(
+      input_tensor_name,
+      output_tensor_name,
+      "",   // lin_vel 仍然自动探测
+      "");  // height 仍然自动探测
+    if (!rl_inference_tensorrt_->initialize(model_path, inference_frequency_hz)) {
+      RCLCPP_ERROR(logger_, "Failed to initialize TensorRT inference");
+      rl_inference_tensorrt_.reset();
+      return false;
+    }
+
+    // 设置调度模式
+    rl_inference_tensorrt_->setMode(inference_mode_, inference_clock_type_, node_);
+
+    RCLCPP_INFO(logger_, "TensorRT inference initialized (not started yet)");
+  } else if (backend == InferenceBackend::ONNXRUNTIME) {
+    if (rl_inference_onnxruntime_) {
+      RCLCPP_WARN(logger_, "ONNX Runtime inference already initialized");
+      return true;
+    }
+
+    rl_inference_onnxruntime_ = std::make_unique<ONNXRuntimeInference>(logger_);
+    // 在真正初始化前先设置期望的张量名称（如果为空则保持自动探测）
+    rl_inference_onnxruntime_->setTensorNames(
+      input_tensor_name,
+      output_tensor_name,
+      "",   // lin_vel 仍然自动探测
+      "");  // height 仍然自动探测
+    if (!rl_inference_onnxruntime_->initialize(model_path, inference_frequency_hz, use_cuda)) {
+      RCLCPP_ERROR(logger_, "Failed to initialize ONNX Runtime inference");
+      rl_inference_onnxruntime_.reset();
+      return false;
+    }
+
+    // 设置调度模式
+    rl_inference_onnxruntime_->setMode(inference_mode_, inference_clock_type_, node_);
+
+    RCLCPP_INFO(logger_, "ONNX Runtime inference initialized (not started yet)");
+  } else {
+    RCLCPP_ERROR(logger_, "Unknown inference backend");
     return false;
   }
 
-  // 设置调度模式
-  rl_inference_->setMode(inference_mode_, inference_clock_type_, node_);
-
-  RCLCPP_INFO(logger_, "RL inference initialized (not started yet)");
   return true;
 }
 
 void StateMachine::startRLInference()
 {
-  if (!rl_inference_) {
-    RCLCPP_WARN(logger_, "RL inference not initialized, cannot start");
-    return;
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    if (!rl_inference_tensorrt_) {
+      RCLCPP_WARN(logger_, "TensorRT inference not initialized, cannot start");
+      return;
+    }
+    if (rl_inference_tensorrt_->isRunning()) {
+      RCLCPP_WARN(logger_, "TensorRT inference already running");
+      return;
+    }
+    rl_inference_tensorrt_->start();
+    RCLCPP_INFO(logger_, "TensorRT inference started");
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    if (!rl_inference_onnxruntime_) {
+      RCLCPP_WARN(logger_, "ONNX Runtime inference not initialized, cannot start");
+      return;
+    }
+    if (rl_inference_onnxruntime_->isRunning()) {
+      RCLCPP_WARN(logger_, "ONNX Runtime inference already running");
+      return;
+    }
+    rl_inference_onnxruntime_->start();
+    RCLCPP_INFO(logger_, "ONNX Runtime inference started");
   }
-
-  if (rl_inference_->isRunning()) {
-    RCLCPP_WARN(logger_, "RL inference already running");
-    return;
-  }
-
-  rl_inference_->start();
-  RCLCPP_INFO(logger_, "RL inference started");
 }
 
 void StateMachine::stopRLInference()
 {
-  if (rl_inference_ && rl_inference_->isRunning()) {
-    rl_inference_->stop();
-    RCLCPP_INFO(logger_, "RL inference stopped (but not destroyed)");
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    if (rl_inference_tensorrt_ && rl_inference_tensorrt_->isRunning()) {
+      rl_inference_tensorrt_->stop();
+      RCLCPP_INFO(logger_, "TensorRT inference stopped (but not destroyed)");
+    }
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    if (rl_inference_onnxruntime_ && rl_inference_onnxruntime_->isRunning()) {
+      rl_inference_onnxruntime_->stop();
+      RCLCPP_INFO(logger_, "ONNX Runtime inference stopped (but not destroyed)");
+    }
   }
 }
 
 bool StateMachine::isRLInferenceInitialized() const
 {
-  return rl_inference_ != nullptr && rl_inference_->isInitialized();
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    return rl_inference_tensorrt_ != nullptr && rl_inference_tensorrt_->isInitialized();
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    return rl_inference_onnxruntime_ != nullptr && rl_inference_onnxruntime_->isInitialized();
+  }
+  return false;
 }
 
 bool StateMachine::isRLInferenceRunning() const
 {
-  return rl_inference_ != nullptr && rl_inference_->isRunning();
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    return rl_inference_tensorrt_ != nullptr && rl_inference_tensorrt_->isRunning();
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    return rl_inference_onnxruntime_ != nullptr && rl_inference_onnxruntime_->isRunning();
+  }
+  return false;
 }
 
 void StateMachine::setRLInput(const std::vector<float>& input_data)
 {
-  if (rl_inference_) {
-    rl_inference_->setInput(input_data);
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    if (rl_inference_tensorrt_) {
+      rl_inference_tensorrt_->setInput(input_data);
+    }
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    if (rl_inference_onnxruntime_) {
+      rl_inference_onnxruntime_->setInput(input_data);
+    }
   }
 }
 
 bool StateMachine::getRLOutput(std::vector<float>& output_data)
 {
-  if (rl_inference_) {
-    return rl_inference_->getOutput(output_data);
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    if (rl_inference_tensorrt_) {
+      return rl_inference_tensorrt_->getOutput(output_data);
+    }
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    if (rl_inference_onnxruntime_) {
+      return rl_inference_onnxruntime_->getOutput(output_data);
+    }
   }
   return false;
 }
@@ -316,8 +391,10 @@ void StateMachine::setTimingConfig(int inference_mode, int lowlevel_mode,
   lowlevel_clock_type_ = parseClockType(lowlevel_clock_type);
   
   // 设置推理器的配置
-  if (rl_inference_) {
-    rl_inference_->setMode(inference_mode_, inference_clock_type_, node_);
+  if (inference_backend_ == InferenceBackend::TENSORRT && rl_inference_tensorrt_) {
+    rl_inference_tensorrt_->setMode(inference_mode_, inference_clock_type_, node_);
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME && rl_inference_onnxruntime_) {
+    rl_inference_onnxruntime_->setMode(inference_mode_, inference_clock_type_, node_);
   }
   
   // 设置 RL 状态的配置

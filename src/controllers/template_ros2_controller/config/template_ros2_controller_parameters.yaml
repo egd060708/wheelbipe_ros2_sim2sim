@@ -10,8 +10,20 @@ template_ros2_controller:
       type: string,
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/parallel/model_gn.engine",
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/model_gn.engine",
-      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_ext_flat_direct/2026-01-14_21-53-40(1)/exported/model_gn25.engine",
-      description: "Path to TensorRT engine model file for reinforcement learning inference",
+      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_ext_flat_direct/2026-01-05_22-58-53/exported/policy17.onnx",
+      description: "Path to model file for reinforcement learning inference (TensorRT .engine or ONNX .onnx)",
+    }
+  rl_inference_backend:
+    {
+      type: string,
+      default_value: "onnxruntime",
+      description: "Inference backend: 'tensorrt' for TensorRT engine files, 'onnxruntime' for ONNX model files",
+    }
+  rl_onnx_use_cuda:
+    {
+      type: bool,
+      default_value: false,
+      description: "For ONNX Runtime backend, whether to use CUDA (GPU). Set to false to use CPU inference.",
     }
   rl_inference_frequency:
     {
@@ -23,13 +35,13 @@ template_ros2_controller:
     {
       type: string,
       default_value: "policy",
-      description: "Name of the input tensor for TensorRT RL model",
+      description: "Name of the input tensor for RL model",
     }
   rl_output_name:
     {
       type: string,
       default_value: "actions",
-      description: "Name of the main output tensor for TensorRT RL model (e.g., actions)",
+      description: "Name of the main output tensor for RL model (e.g., actions)",
     }
   rl_lowlevel_frequency:
     {

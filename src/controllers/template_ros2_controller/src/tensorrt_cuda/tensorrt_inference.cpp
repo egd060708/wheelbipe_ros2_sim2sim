@@ -351,7 +351,7 @@ bool TensorRTInference::allocateBuffers()
     output_height_size_ = 1;
     for (int i = 0; i < height_dims.nbDims; ++i) {
       output_height_size_ *= height_dims.d[i];
-    }
+  }
     output_height_size_ *= sizeof(float);
   } else {
     output_height_size_ = 0;

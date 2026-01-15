@@ -30,7 +30,15 @@ namespace robot_locomotion
 // 前向声明
 struct RobotState;
 class TensorRTInference;
+class ONNXRuntimeInference;
 class StateBase;
+
+// 推理后端类型枚举
+enum class InferenceBackend
+{
+  TENSORRT = 0,
+  ONNXRUNTIME = 1
+};
 
 // 状态机状态枚举
 enum class ControllerState
@@ -67,10 +75,14 @@ public:
   void reset();
 
   // 初始化 RL 推理器（只初始化，不启动）
-  // 只从外部配置输入张量名和“主输出”张量名（通常为 actions），其他输出自动探测
-  bool initializeRLInference(const std::string& engine_model_path, int inference_frequency_hz,
+  // 只从外部配置输入张量名和"主输出"张量名（通常为 actions），其他输出自动探测
+  // backend: 推理后端类型（TENSORRT 或 ONNXRUNTIME）
+  // use_cuda: 对于 ONNX Runtime，是否使用 CUDA（false 表示使用 CPU）
+  bool initializeRLInference(const std::string& model_path, int inference_frequency_hz,
+                             InferenceBackend backend = InferenceBackend::TENSORRT,
                              const std::string& input_tensor_name = "",
-                             const std::string& output_tensor_name = "");
+                             const std::string& output_tensor_name = "",
+                             bool use_cuda = false);
 
   // 启动 RL 推理器（在进入 RL 状态时调用）
   void startRLInference();
@@ -109,8 +121,9 @@ public:
                       const std::vector<double>& bias,
                       const std::vector<double>& default_dof_pos);
 
-  // TensorRT 推理器（用于 RL 状态）
-  std::unique_ptr<TensorRTInference> rl_inference_;
+  // 推理器（用于 RL 状态）- 根据后端类型选择
+  std::unique_ptr<TensorRTInference> rl_inference_tensorrt_;
+  std::unique_ptr<ONNXRuntimeInference> rl_inference_onnxruntime_;
 
 protected:
   // 状态转换逻辑
@@ -132,6 +145,7 @@ protected:
 
   // 状态对象管理
   std::map<ControllerState, std::unique_ptr<StateBase>> states_;
+  InferenceBackend inference_backend_;  // 移到 current_state_obj_ 之前
   StateBase* current_state_obj_;
 
   // // TensorRT 推理器（用于 RL 状态）
