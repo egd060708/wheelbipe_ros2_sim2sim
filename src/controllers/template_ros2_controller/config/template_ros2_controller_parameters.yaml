@@ -10,7 +10,7 @@ template_ros2_controller:
       type: string,
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/parallel/model_gn.engine",
       # default_value: "/home/lu/Git_Project/github/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/model_gn.engine",
-      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_ext_flat_direct/2026-01-05_22-58-53/exported/policy17.onnx",
+      default_value: "/home/lu/Git_Project/gitea/wheelbipe_rl/logs/rsl_rl/wheelbipe25_v3_ext_flat_direct/2026-01-15_14-54-57/exported/policy19.onnx",
       description: "Path to model file for reinforcement learning inference (TensorRT .engine or ONNX .onnx)",
     }
   rl_inference_backend:
