@@ -200,20 +200,42 @@ bool ONNXRuntimeInference::createSession()
   RCLCPP_INFO(logger_, "ONNX model loaded. Inputs: %zu, Outputs: %zu", num_input_nodes, num_output_nodes);
 
   // 查找输入张量（ONNX Runtime 1.20.x 使用新的 API）
-  std::string first_input_name;
+  std::string found_input_name;
   Ort::AllocatorWithDefaultOptions allocator;
+  
+  // 1. 首先尝试寻找完全匹配的张量名
   for (size_t i = 0; i < num_input_nodes; ++i) {
     auto input_name = session_->GetInputNameAllocated(i, allocator);
     if (!input_name) continue;
-
     std::string name(input_name.get());
-
-    if (first_input_name.empty()) {
-      first_input_name = name;
+    if (name == input_tensor_name_) {
+      found_input_name = name;
+      break;
     }
+  }
 
-    if (input_tensor_name_.empty() || name == input_tensor_name_) {
-      input_tensor_name_ = name;
+  // 2. 如果没找到指定的输入，退而求其次使用第一个输入
+  if (found_input_name.empty() && num_input_nodes > 0) {
+    auto input_name = session_->GetInputNameAllocated(0, allocator);
+    if (input_name) {
+      found_input_name = std::string(input_name.get());
+      if (!input_tensor_name_.empty()) {
+        RCLCPP_WARN(logger_, "Input tensor '%s' not found, using first input: %s",
+                    input_tensor_name_.c_str(), found_input_name.c_str());
+      }
+    }
+  }
+
+  if (found_input_name.empty()) {
+    RCLCPP_ERROR(logger_, "No input tensors found in the model");
+    return false;
+  }
+
+  // 3. 无论如何，根据最终确定的输入张量名来初始化输入维度
+  input_tensor_name_ = found_input_name;
+  for (size_t i = 0; i < num_input_nodes; ++i) {
+    auto input_name = session_->GetInputNameAllocated(i, allocator);
+    if (input_name && std::string(input_name.get()) == input_tensor_name_) {
       auto type_info = session_->GetInputTypeInfo(i);
       auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
       input_shape_ = tensor_info.GetShape();
@@ -225,8 +247,8 @@ bool ONNXRuntimeInference::createSession()
         }
       }
       
-      RCLCPP_INFO(logger_, "Found input tensor: %s, shape: [%s], size: %zu",
-        name.c_str(), 
+      RCLCPP_INFO(logger_, "Using input tensor: %s, shape: [%s], size: %zu",
+        input_tensor_name_.c_str(), 
         [&]() {
           std::string shape_str;
           for (size_t j = 0; j < input_shape_.size(); ++j) {
@@ -237,17 +259,6 @@ bool ONNXRuntimeInference::createSession()
         }().c_str(),
         input_size_);
       break;
-    }
-  }
-
-  if (input_tensor_name_.empty()) {
-    if (!first_input_name.empty()) {
-      input_tensor_name_ = first_input_name;
-      RCLCPP_WARN(logger_, "Input tensor '%s' not found, using first input: %s",
-        input_tensor_name_.c_str(), first_input_name.c_str());
-    } else {
-      RCLCPP_ERROR(logger_, "No input tensors found in the model");
-      return false;
     }
   }
 

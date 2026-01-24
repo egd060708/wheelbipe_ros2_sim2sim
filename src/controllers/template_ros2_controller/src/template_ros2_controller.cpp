@@ -112,15 +112,13 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
   state_machine_->setInferenceFrequency(static_cast<double>(params_.rl_inference_frequency));
   
-  // 设置关节参数
   if (!params_.joint_stiffness.empty() && 
       !params_.joint_damping.empty() && 
       !params_.joint_action_scale.empty() &&
       !params_.joint_output_max.empty() &&
       !params_.joint_output_min.empty() &&
       !params_.joint_bias.empty() &&
-      !params_.default_dof_pos.empty() &&
-      !params_.joint_armature.empty()) {
+      !params_.default_dof_pos.empty()) {
     state_machine_->setJointParams(
       params_.joint_stiffness,
       params_.joint_damping,
@@ -128,8 +126,7 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
       params_.joint_output_max,
       params_.joint_output_min,
       params_.joint_bias,
-      params_.default_dof_pos,
-      params_.joint_armature);
+      params_.default_dof_pos);
   }
   
   return controller_interface::CallbackReturn::SUCCESS;
@@ -225,15 +222,13 @@ controller_interface::return_type TemplateRos2Controller::update(
         params_.lowlevel_timer_clock_type);
       state_machine_->setLowlevelFrequency(params_.rl_lowlevel_frequency);
       state_machine_->setInferenceFrequency(static_cast<double>(params_.rl_inference_frequency));
-      // 更新关节参数
       if (!params_.joint_stiffness.empty() && 
           !params_.joint_damping.empty() && 
           !params_.joint_action_scale.empty() &&
           !params_.joint_output_max.empty() &&
           !params_.joint_output_min.empty() &&
           !params_.joint_bias.empty() &&
-          !params_.default_dof_pos.empty() &&
-          !params_.joint_armature.empty()) {
+          !params_.default_dof_pos.empty()) {
         state_machine_->setJointParams(
           params_.joint_stiffness,
           params_.joint_damping,
@@ -241,8 +236,7 @@ controller_interface::return_type TemplateRos2Controller::update(
           params_.joint_output_max,
           params_.joint_output_min,
           params_.joint_bias,
-          params_.default_dof_pos,
-          params_.joint_armature);
+          params_.default_dof_pos);
       }
     }
   }

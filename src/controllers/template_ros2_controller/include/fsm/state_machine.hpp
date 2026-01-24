@@ -102,6 +102,9 @@ public:
   // 获取 RL 推理器输出
   bool getRLOutput(std::vector<float>& output_data);
 
+  // 获取 RL 推理器输入维度
+  size_t getRLInputSize() const;
+
   // 获取目标状态
   ControllerState getTargetState() const { return target_state_; }
 
@@ -119,8 +122,7 @@ public:
                       const std::vector<double>& output_max,
                       const std::vector<double>& output_min,
                       const std::vector<double>& bias,
-                      const std::vector<double>& default_dof_pos,
-                      const std::vector<double>& armature);
+                      const std::vector<double>& default_dof_pos);
 
   // 推理器（用于 RL 状态）- 根据后端类型选择
   std::unique_ptr<TensorRTInference> rl_inference_tensorrt_;

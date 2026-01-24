@@ -33,7 +33,6 @@ StateRL::StateRL(StateMachine *state_machine, rclcpp::Logger logger)
   float default_output_max[8] = {0.0f};
   float default_output_min[8] = {0.0f};
   float default_bias[8] = {0.0f};
-  float default_armature[8] = {0.0f};
 
   for (int i = 0; i < 8; i++) {
     this->params_.joint_stiffness[i] = default_stiffness[i];
@@ -42,7 +41,6 @@ StateRL::StateRL(StateMachine *state_machine, rclcpp::Logger logger)
     this->params_.joint_output_max[i] = default_output_max[i];
     this->params_.joint_output_min[i] = default_output_min[i];
     this->params_.joint_bias[i] = default_bias[i];
-    this->params_.joint_armature[i] = default_armature[i];
   }
 
   this->params_.ang_vel_scale = 1.0f;
@@ -241,32 +239,29 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     model_input.push_back(la);
   }
 
-  // 初始化并推断当前 TensorRT 模型期望的输入维度，以区分「旧策略」与「带跳跃的新策略」
+  // 初始化并推断当前推理模型期望的输入维度，以区分「旧策略」与「带跳跃的新策略」
   if (state_machine_ && state_machine_->isRLInferenceInitialized() && !model_input_dim_initialized_) {
-    auto *trt = state_machine_->rl_inference_.get();
-    if (trt) {
-      const size_t engine_input_dim = trt->getInputElementCount();
-      const size_t base_dim = model_input.size();
-      if (engine_input_dim == base_dim + 2) {
-        // 30 = 28 维 + jump_height(1) + jump_phase_sin(1)
-        model_input_extra_dim_ = 2;
-        RCLCPP_INFO(logger_,
-                    "Detected jump-enabled policy: engine_input_dim=%zu, base_dim=%zu, extra_dim=%d (30-dim)",
-                    engine_input_dim, base_dim, model_input_extra_dim_);
-      } else if (engine_input_dim == base_dim) {
-        model_input_extra_dim_ = 0;
-        RCLCPP_INFO(logger_,
-                    "Detected legacy policy (no jump features): engine_input_dim=%zu, base_dim=%zu",
-                    engine_input_dim, base_dim);
-      } else {
-        model_input_extra_dim_ = static_cast<int>(engine_input_dim) - static_cast<int>(base_dim);
-        RCLCPP_WARN(logger_,
-                    "Unexpected policy input dim: engine_input_dim=%zu, base_dim=%zu, diff=%d. "
-                    "Using base observations only.",
-                    engine_input_dim, base_dim, model_input_extra_dim_);
-        // 为安全起见，不追加额外特征
-        model_input_extra_dim_ = 0;
-      }
+    const size_t engine_input_dim = state_machine_->getRLInputSize();
+    const size_t base_dim = model_input.size();
+    if (engine_input_dim == base_dim + 2) {
+      // 30 = 28 维 + jump_height(1) + jump_phase_sin(1)
+      model_input_extra_dim_ = 2;
+      RCLCPP_INFO(logger_,
+                  "Detected jump-enabled policy: engine_input_dim=%zu, base_dim=%zu, extra_dim=%d (30-dim)",
+                  engine_input_dim, base_dim, model_input_extra_dim_);
+    } else if (engine_input_dim == base_dim) {
+      model_input_extra_dim_ = 0;
+      RCLCPP_INFO(logger_,
+                  "Detected legacy policy (no jump features): engine_input_dim=%zu, base_dim=%zu",
+                  engine_input_dim, base_dim);
+    } else {
+      model_input_extra_dim_ = static_cast<int>(engine_input_dim) - static_cast<int>(base_dim);
+      RCLCPP_WARN(logger_,
+                  "Unexpected policy input dim: engine_input_dim=%zu, base_dim=%zu, diff=%d. "
+                  "Using base observations only.",
+                  engine_input_dim, base_dim, model_input_extra_dim_);
+      // 为安全起见，不追加额外特征
+      model_input_extra_dim_ = 0;
     }
     model_input_dim_initialized_ = true;
   }
@@ -376,8 +371,7 @@ void StateRL::setJointParams(const std::vector<double> &stiffness,
                               const std::vector<double> &output_max,
                               const std::vector<double> &output_min,
                               const std::vector<double> &bias,
-                              const std::vector<double> &default_dof_pos,
-                              const std::vector<double> &armature) {
+                              const std::vector<double> &default_dof_pos) {
   // 更新参数数组（最多8个关节）
   size_t max_joints = std::min(static_cast<size_t>(8), stiffness.size());
   max_joints = std::min(max_joints, damping.size());
@@ -386,7 +380,6 @@ void StateRL::setJointParams(const std::vector<double> &stiffness,
   max_joints = std::min(max_joints, output_min.size());
   max_joints = std::min(max_joints, bias.size());
   max_joints = std::min(max_joints, default_dof_pos.size());
-  max_joints = std::min(max_joints, armature.size());
 
   for (size_t i = 0; i < max_joints; i++) {
     params_.joint_stiffness[i] = static_cast<float>(stiffness[i]);
@@ -396,7 +389,6 @@ void StateRL::setJointParams(const std::vector<double> &stiffness,
     params_.joint_output_min[i] = static_cast<float>(output_min[i]);
     params_.joint_bias[i] = static_cast<float>(bias[i]);
     params_.default_dof_pos[i] = static_cast<float>(default_dof_pos[i]);
-    params_.joint_armature[i] = static_cast<float>(armature[i]);
   }
 
   // 更新PID控制器参数（前6个关节）

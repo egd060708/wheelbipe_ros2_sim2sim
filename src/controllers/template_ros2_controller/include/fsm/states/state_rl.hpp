@@ -39,7 +39,6 @@ struct ModelParams
     float joint_output_min[8] = {0};
     float joint_bias[8] = {0};  // 偏置输出力矩
     float default_dof_pos[8] = {0};
-    float joint_armature[8] = {0};  // 转子惯量
     
     // 其他参数
     float ang_vel_scale;
@@ -79,8 +78,7 @@ public:
                       const std::vector<double>& output_max,
                       const std::vector<double>& output_min,
                       const std::vector<double>& bias,
-                      const std::vector<double>& default_dof_pos,
-                      const std::vector<double>& armature);
+                      const std::vector<double>& default_dof_pos);
   
   // 设置推理频率（用于内联模式）
   void setInferenceFrequency(double freq_hz);

@@ -321,7 +321,9 @@ bool TensorRTInference::allocateBuffers()
 
   input_size_ = 1;
   for (int i = 0; i < input_dims.nbDims; ++i) {
-    input_size_ *= input_dims.d[i];
+    if (input_dims.d[i] > 0) {
+      input_size_ *= input_dims.d[i];
+    }
   }
   input_size_ *= sizeof(float);
 

@@ -371,6 +371,20 @@ bool StateMachine::getRLOutput(std::vector<float>& output_data)
   return false;
 }
 
+size_t StateMachine::getRLInputSize() const
+{
+  if (inference_backend_ == InferenceBackend::TENSORRT) {
+    if (rl_inference_tensorrt_) {
+      return rl_inference_tensorrt_->getInputElementCount();
+    }
+  } else if (inference_backend_ == InferenceBackend::ONNXRUNTIME) {
+    if (rl_inference_onnxruntime_) {
+      return rl_inference_onnxruntime_->getInputElementCount();
+    }
+  }
+  return 0;
+}
+
 static rcl_clock_type_t parseClockType(const std::string& type_str)
 {
   if (type_str == "ROS_TIME") {
@@ -429,21 +443,19 @@ void StateMachine::setInferenceFrequency(double freq_hz)
     }
   }
 }
-
 void StateMachine::setJointParams(const std::vector<double>& stiffness,
                                    const std::vector<double>& damping,
                                    const std::vector<double>& action_scale,
                                    const std::vector<double>& output_max,
                                    const std::vector<double>& output_min,
                                    const std::vector<double>& bias,
-                                   const std::vector<double>& default_dof_pos,
-                                   const std::vector<double>& armature)
+                                   const std::vector<double>& default_dof_pos)
 {
   // 传递给 RL 状态
   if (states_.find(ControllerState::RL) != states_.end()) {
     StateRL* rl_state = dynamic_cast<StateRL*>(states_[ControllerState::RL].get());
     if (rl_state) {
-      rl_state->setJointParams(stiffness, damping, action_scale, output_max, output_min, bias, default_dof_pos, armature);
+      rl_state->setJointParams(stiffness, damping, action_scale, output_max, output_min, bias, default_dof_pos);
     }
   }
 }
