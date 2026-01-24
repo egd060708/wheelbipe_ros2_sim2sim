@@ -10,6 +10,7 @@ Wheelbipe 双轮机器人在 Webots 仿真环境下的 ROS 2 控制框架，支�
 | ROS 2 | Jazzy Jalisco (desktop) |
 | 仿真器 | Webots ≥ R2023a |
 | CUDA/TensorRT | CUDA 12.x + TensorRT 10.x (可选，用于 RL 推理) |
+| ONNX Runtime | 1.20.x 或更高版本 (可选，用于 RL 推理，支持 CPU/GPU) |
 
 ## 快速开始
 
@@ -21,7 +22,7 @@ sudo apt install ros-jazzy-desktop ros-jazzy-webots-ros2-driver \
                  ros-jazzy-webots-ros2-control python3-colcon-common-extensions \
                  ros-jazzy-xacro
 
-# TensorRT (可选)
+# TensorRT (可选，用于 TensorRT 后端)
 sudo apt install nvidia-cuda-dev tensorrt-dev tensorrt
 
 # ros2_control 扩展
@@ -30,6 +31,18 @@ sudo apt install nvidia-cuda-dev tensorrt-dev tensorrt
 # 安装TensorRT（参考版本为10.9）
 # https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html
 # https://zhuanlan.zhihu.com/p/679763042
+
+# ONNX Runtime (可选，用于 ONNX Runtime 后端)
+# 方法 1: 从官方预编译包安装（推荐）
+# 访问 https://github.com/microsoft/onnxruntime/releases
+# 下载对应版本（CPU 或 GPU）：
+#   wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.0/onnxruntime-linux-x64-gpu-1.20.0.tgz  # GPU版本
+#   # 或
+#   wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.0/onnxruntime-linux-x64-1.20.0.tgz    # CPU版本
+#   tar -xzf onnxruntime-linux-x64-*.tgz
+#   设置环境变量：
+#   export ONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-*
+#   export LD_LIBRARY_PATH=$ONNXRUNTIME_ROOT/lib:$LD_LIBRARY_PATH
 ```
 
 ### 2. 构建
@@ -72,13 +85,13 @@ ros2 launch template_middleware template_bring_up.launch.py \
 
 - rl仓库中通过play，自动完成.pt->.onnx模型文件导出
 
--- 使用 TensorRT 的量化器或本仓库提供的转换工具将 ONNX 转为 TensorRT engine
+-- **选择推理后端**：
+  - **TensorRT 后端**：使用  TensorRT  的量化器或本仓库提供的转换工具将 ONNX 转为 TensorRT engine
 
 **方式 A：使用 TensorRT 自带量化/转换工具 `trtexec`**
-
-```bash
-<path_to_tensorrt>/bin/trtexec --onnx=<onnx_filename> --saveEngine=<engine_filename>
-```
+    ```bash
+    <path_to_tensorrt>/bin/trtexec --onnx=<onnx_filename> --saveEngine=<engine_filename>
+    ```
 
 **方式 B：使用本仓库的 ROS 2 工具包 `onnx_to_tensorrt`**
 
@@ -93,8 +106,15 @@ ros2 run onnx_to_tensorrt onnx_to_engine \
   '/home/robotlab/RL/wheelbipe_ros2_sim2sim/src/controllers/template_ros2_controller/policy/serial/jump.engine' \
   --fp16 --max-batch 1
 ```
+  - **ONNX Runtime 后端**：直接使用 .onnx 文件，无需转换
 
-- 修改template_ros2_controller_parameters.yaml，注意配置`rl_model_path`为本地绝对路径
+- 修改 `template_ros2_controller_parameters.yaml`，配置以下参数：
+  - `rl_model_path`: 模型文件路径（.engine 或 .onnx，需要手动修改为本地的绝对路径）
+  - `rl_inference_backend`: 推理后端（`"tensorrt"` 或 `"onnxruntime"`）
+  - `rl_onnx_use_cuda`: 对于 ONNX Runtime，是否使用 GPU（`false` 表示使用 CPU，推荐）
+  - `rl_input_name`: 输入张量名称（如 `"policy"`）
+  - `rl_output_name`: 主输出张量名称（如 `"actions"`）
+
 - 编译
 
 ```bash
@@ -136,8 +156,20 @@ src/
 
 主要配置文件：`src/controllers/template_ros2_controller/config/template_ros2_controller_parameters.yaml`
 
-关键参数：
-- `rl_model_path`: TensorRT 引擎文件路径==（需要手动修改为本地的绝对路径）==
+#### 推理后端配置
+
+- `rl_model_path`: 模型文件路径（.engine 或 .onnx，需要手动修改为本地的绝对路径）
+- `rl_inference_backend`: 推理后端类型
+  - `"tensorrt"`: 使用 TensorRT 后端（需要 .engine 文件）
+  - `"onnxruntime"`: 使用 ONNX Runtime 后端（需要 .onnx 文件）
+- `rl_onnx_use_cuda`: 对于 ONNX Runtime，是否使用 GPU
+  - `false`: 使用 CPU 推理（推荐，避免 CUBLAS 错误）
+  - `true`: 使用 CUDA/GPU 推理（需要 CUDA 环境）
+- `rl_input_name`: 输入张量名称（如 `"policy"`）
+- `rl_output_name`: 主输出张量名称（如 `"actions"`）
+
+#### 其他关键参数
+
 - `rl_inference_frequency`: 推理频率 (Hz)
 - `inference_mode` / `lowlevel_mode`: 调度模式（0=线程，1=ROS2 定时器，2=内联）
 - `joint_stiffness` / `joint_damping`: 关节 PD 参数
@@ -168,11 +200,42 @@ src/
 | --- | --- |
 | `libfmt.a` 链接错误 | 检查环境变量，确保未引用 `/usr/local/lib/libfmt.a` |
 | TensorRT 库未找到 | 设置 `export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH` |
+| ONNX Runtime 库未找到 | 设置 `export ONNXRUNTIME_ROOT=/path/to/onnxruntime` 和 `export LD_LIBRARY_PATH=$ONNXRUNTIME_ROOT/lib:$LD_LIBRARY_PATH` |
+| ONNX Runtime CUBLAS 错误 | 在 YAML 中设置 `rl_onnx_use_cuda: false` 使用 CPU 推理 |
 | Webots 未启动 | 检查 `robot_descriptions/<prefix>/worlds/<prefix>.wbt` 是否存在 |
 | 控制器加载失败 | 确认 `controllers.yaml` 与 `prefix` 匹配，插件名正确 |
+| 输入/输出张量名称错误 | 检查模型文件，确认 `rl_input_name` 和 `rl_output_name` 与模型中的张量名称匹配 |
+
+## 推理后端说明
+
+### TensorRT 后端
+
+- **模型格式**: `.engine` 文件（需要从 `.onnx` 转换）
+- **优势**: 推理速度快，针对 NVIDIA GPU 优化
+- **要求**: CUDA + TensorRT 环境
+- **转换命令**: 
+  ```bash
+  <path_to_tensorrt>/bin/trtexec --onnx=<onnx_filename> --saveEngine=<engine_filename>
+  ```
+
+### ONNX Runtime 后端
+
+- **模型格式**: `.onnx` 文件（直接使用，无需转换）
+- **优势**: 通用性强，支持多种硬件（CPU/GPU），配置简单
+- **要求**: ONNX Runtime 库（CPU 版本无需 CUDA）
+- **推荐配置**: 
+  - 使用 CPU 推理：`rl_onnx_use_cuda: false`（推荐，避免 CUBLAS 错误）
+  - 使用 GPU 推理：`rl_onnx_use_cuda: true`（需要 CUDA 环境）
+
+### 切换后端
+
+只需在 `template_ros2_controller_parameters.yaml` 中修改：
+- `rl_inference_backend`: `"tensorrt"` 或 `"onnxruntime"`
+- `rl_model_path`: 对应的模型文件路径（.engine 或 .onnx）
 
 ## 参考
 
 - [Webots ROS 2](https://github.com/cyberbotics/webots_ros2)
 - [ros2_control](https://control.ros.org/)
 - [TensorRT 文档](https://docs.nvidia.com/deeplearning/tensorrt/)
+- [ONNX Runtime 文档](https://onnxruntime.ai/)

@@ -14,6 +14,7 @@
 
 #include "template_ros2_controller/template_ros2_controller.hpp"
 // #include <template_ros2_controller/template_ros2_controller_parameters.hpp>
+#include "fsm/state_machine.hpp"
 #include "utils/timeMarker.h"
 #include <mutex>
 #include <algorithm>
@@ -64,11 +65,35 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   
   // 初始化 RL 推理器（如果模型路径已配置）
   if (!params_.rl_model_path.empty()) {
+    // 解析后端类型
+    InferenceBackend backend = InferenceBackend::TENSORRT;
+    std::string backend_str = params_.rl_inference_backend;
+    std::transform(backend_str.begin(), backend_str.end(), backend_str.begin(), ::tolower);
+    if (backend_str == "onnxruntime" || backend_str == "onnx") {
+      backend = InferenceBackend::ONNXRUNTIME;
+    } else {
+      backend = InferenceBackend::TENSORRT;
+    }
+
+    // 对于 ONNX Runtime，传递 use_cuda 参数
+    bool use_cuda = false;
+    if (backend == InferenceBackend::ONNXRUNTIME) {
+      use_cuda = params_.rl_onnx_use_cuda;
+    }
+    
     if (state_machine_->initializeRLInference(
-        params_.rl_model_path, params_.rl_inference_frequency)) {
+        params_.rl_model_path,
+        params_.rl_inference_frequency,
+        backend,
+        params_.rl_input_name,
+        params_.rl_output_name,
+        use_cuda)) {
       RCLCPP_INFO(get_node()->get_logger(), 
-        "RL inference initialized in on_init with model: %s, frequency: %ld Hz",
-        params_.rl_model_path.c_str(), static_cast<long>(params_.rl_inference_frequency));
+        "RL inference initialized in on_init with model: %s, backend: %s, frequency: %ld Hz%s",
+        params_.rl_model_path.c_str(), 
+        backend == InferenceBackend::TENSORRT ? "TensorRT" : "ONNX Runtime",
+        static_cast<long>(params_.rl_inference_frequency),
+        (backend == InferenceBackend::ONNXRUNTIME) ? (use_cuda ? " (CUDA)" : " (CPU)") : "");
     } else {
       RCLCPP_ERROR(get_node()->get_logger(), 
         "Failed to initialize RL inference in on_init");

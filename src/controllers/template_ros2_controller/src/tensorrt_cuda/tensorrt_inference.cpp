@@ -49,13 +49,19 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , engine_(nullptr)
   , context_(nullptr)
   , input_buffer_(nullptr)
-  , output_buffer_(nullptr)
+  , output_actions_buffer_(nullptr)
+  , output_lin_vel_buffer_(nullptr)
+  , output_height_buffer_(nullptr)
   , input_size_(0)
-  , output_size_(0)
+  , output_actions_size_(0)
+  , output_lin_vel_size_(0)
+  , output_height_size_(0)
   , input_binding_index_(-1)
   , output_binding_index_(-1)
   , input_tensor_name_()
-  , output_tensor_name_()
+  , output_actions_name_()
+  , output_lin_vel_name_()
+  , output_height_name_()
   , running_(false)
   , initialized_(false)
   , input_ready_(false)
@@ -75,6 +81,26 @@ TensorRTInference::~TensorRTInference()
   stop();
   destroyEngine();
   freeBuffers();
+}
+
+void TensorRTInference::setTensorNames(const std::string& input_name,
+                                       const std::string& actions_name,
+                                       const std::string& lin_vel_name,
+                                       const std::string& height_name)
+{
+  // 仅保存“期望名称”，具体是否存在由 createExecutionContext 中进行检查和回退
+  if (!input_name.empty()) {
+    input_tensor_name_ = input_name;
+  }
+  if (!actions_name.empty()) {
+    output_actions_name_ = actions_name;
+  }
+  if (!lin_vel_name.empty()) {
+    output_lin_vel_name_ = lin_vel_name;
+  }
+  if (!height_name.empty()) {
+    output_height_name_ = height_name;
+  }
 }
 
 bool TensorRTInference::initialize(const std::string& engine_model_path, int inference_frequency_hz)
@@ -187,66 +213,111 @@ bool TensorRTInference::createExecutionContext()
     return false;
   }
 
-  // 获取输入输出张量名称 (TensorRT 10 API: use getNbIOTensors and getIOTensorName)
-  // 尝试使用常见的输入输出名称
-  const char* input_names[] = {"input", "obs", "observation", "state"};
-  const char* output_names[] = {"output", "action", "actions", "torque"};
-  
-  std::string input_tensor_name;
-  std::string output_tensor_name;
-  
-  // 遍历所有 IO 张量，查找输入和输出
+  // 获取输入输出张量名称 (TensorRT 10 API: use getNbIOTensors / getIOTensorName)
+  // 新模型约定：输入为 policy，输出为 actions / lin_vel / height
   int32_t num_io_tensors = engine_->getNbIOTensors();
+
+  std::string first_input_name;
+  std::vector<std::string> output_tensor_names;
+
   for (int32_t i = 0; i < num_io_tensors; ++i) {
     const char* tensor_name = engine_->getIOTensorName(i);
-    if (!tensor_name) continue;
-    
-    // 检查是否是输入
-    for (const char* name : input_names) {
-      if (std::strcmp(tensor_name, name) == 0) {
-        input_tensor_name = tensor_name;
-        RCLCPP_INFO(logger_, "Found input tensor: %s", tensor_name);
-        break;
-      }
+    if (!tensor_name) {
+      continue;
     }
-    
-    // 检查是否是输出
-    for (const char* name : output_names) {
-      if (std::strcmp(tensor_name, name) == 0) {
-        output_tensor_name = tensor_name;
-        RCLCPP_INFO(logger_, "Found output tensor: %s", tensor_name);
-        break;
+
+    // 使用 TensorRT 的 I/O 模式接口判断输入/输出，避免仅靠名字猜测
+    nvinfer1::TensorIOMode io_mode = engine_->getTensorIOMode(tensor_name);
+    if (io_mode == nvinfer1::TensorIOMode::kINPUT) {
+      if (first_input_name.empty()) {
+        first_input_name = tensor_name;
+      }
+      // 如果还没有通过外部配置指定输入名，则优先尝试使用名为 "policy" 的张量
+      if (input_tensor_name_.empty() && std::strcmp(tensor_name, "policy") == 0) {
+        input_tensor_name_ = tensor_name;
+      }
+    } else if (io_mode == nvinfer1::TensorIOMode::kOUTPUT) {
+      output_tensor_names.emplace_back(tensor_name);
+      // 只有在尚未由外部配置指定时，才根据常用名称自动匹配
+      if (output_actions_name_.empty() && std::strcmp(tensor_name, "actions") == 0) {
+        output_actions_name_ = tensor_name;
+      } else if (output_lin_vel_name_.empty() && std::strcmp(tensor_name, "lin_vel") == 0) {
+        output_lin_vel_name_ = tensor_name;
+      } else if (output_height_name_.empty() && std::strcmp(tensor_name, "height") == 0) {
+        output_height_name_ = tensor_name;
       }
     }
   }
 
-  // 如果没有找到，使用第一个作为输入，第二个作为输出
-  if (input_tensor_name.empty() && num_io_tensors > 0) {
-    input_tensor_name = engine_->getIOTensorName(0);
-    RCLCPP_WARN(logger_, "Using first tensor as input: %s", input_tensor_name.c_str());
-  }
-  if (output_tensor_name.empty() && num_io_tensors > 1) {
-    output_tensor_name = engine_->getIOTensorName(1);
-    RCLCPP_WARN(logger_, "Using second tensor as output: %s", output_tensor_name.c_str());
+  // 兼容性：如果没有找到名为 policy 的输入，则退回第一个输入
+  if (input_tensor_name_.empty()) {
+    if (!first_input_name.empty()) {
+      input_tensor_name_ = first_input_name;
+      RCLCPP_WARN(logger_, "Input tensor 'policy' not found, using first input tensor: %s",
+                  input_tensor_name_.c_str());
+    } else {
+      RCLCPP_ERROR(logger_, "No input tensors found in the engine");
+      return false;
+    }
+  } else {
+    RCLCPP_INFO(logger_, "Using input tensor: %s", input_tensor_name_.c_str());
   }
 
-  // 存储张量名称（用于后续设置地址）
-  input_tensor_name_ = input_tensor_name;
-  output_tensor_name_ = output_tensor_name;
+  // 兼容性：如果没有找到 actions/lin_vel/height，则根据输出顺序进行回退
+  if (output_actions_name_.empty() && !output_tensor_names.empty()) {
+    output_actions_name_ = output_tensor_names[0];
+    RCLCPP_WARN(logger_, "Output tensor 'actions' not found, using first output tensor: %s",
+                output_actions_name_.c_str());
+  } else if (!output_actions_name_.empty()) {
+    RCLCPP_INFO(logger_, "Using actions output tensor: %s", output_actions_name_.c_str());
+  }
+
+  // 其余两个输出是可选的：如果 engine 里有则使用，否则保持为空（旧模型只有一个输出）
+  if (output_lin_vel_name_.empty()) {
+    for (const auto& name : output_tensor_names) {
+      if (name != output_actions_name_) {
+        output_lin_vel_name_ = name;
+        RCLCPP_WARN(logger_, "Output tensor 'lin_vel' not found, using additional output tensor: %s",
+                    output_lin_vel_name_.c_str());
+        break;
+      }
+    }
+  }
+  if (!output_lin_vel_name_.empty()) {
+    RCLCPP_INFO(logger_, "Using lin_vel output tensor: %s", output_lin_vel_name_.c_str());
+  }
+
+  if (output_height_name_.empty()) {
+    for (const auto& name : output_tensor_names) {
+      if (name != output_actions_name_ && name != output_lin_vel_name_) {
+        output_height_name_ = name;
+        RCLCPP_WARN(logger_, "Output tensor 'height' not found, using additional output tensor: %s",
+                    output_height_name_.c_str());
+        break;
+      }
+    }
+  }
+  if (!output_height_name_.empty()) {
+    RCLCPP_INFO(logger_, "Using height output tensor: %s", output_height_name_.c_str());
+  }
+
+  if (output_actions_name_.empty()) {
+    RCLCPP_ERROR(logger_, "No usable output tensor found (expected at least 'actions')");
+    return false;
+  }
 
   return true;
 }
 
 bool TensorRTInference::allocateBuffers()
 {
-  if (!engine_ || input_tensor_name_.empty() || output_tensor_name_.empty()) {
+  if (!engine_ || input_tensor_name_.empty() || output_actions_name_.empty()) {
     RCLCPP_ERROR(logger_, "Engine not loaded or tensor names not set, cannot allocate buffers");
     return false;
   }
 
-  // 获取输入输出尺寸 (TensorRT 10 API: use getTensorShape)
+  // 获取输入尺寸 (TensorRT 10 API: use getTensorShape)
   auto input_dims = context_->getTensorShape(input_tensor_name_.c_str());
-  auto output_dims = context_->getTensorShape(output_tensor_name_.c_str());
 
   input_size_ = 1;
   for (int i = 0; i < input_dims.nbDims; ++i) {
@@ -254,11 +325,37 @@ bool TensorRTInference::allocateBuffers()
   }
   input_size_ *= sizeof(float);
 
-  output_size_ = 1;
-  for (int i = 0; i < output_dims.nbDims; ++i) {
-    output_size_ *= output_dims.d[i];
+  // actions 输出尺寸
+  auto actions_dims = context_->getTensorShape(output_actions_name_.c_str());
+  output_actions_size_ = 1;
+  for (int i = 0; i < actions_dims.nbDims; ++i) {
+    output_actions_size_ *= actions_dims.d[i];
   }
-  output_size_ *= sizeof(float);
+  output_actions_size_ *= sizeof(float);
+
+  // lin_vel 输出尺寸（可选）
+  if (!output_lin_vel_name_.empty()) {
+    auto lin_vel_dims = context_->getTensorShape(output_lin_vel_name_.c_str());
+    output_lin_vel_size_ = 1;
+    for (int i = 0; i < lin_vel_dims.nbDims; ++i) {
+      output_lin_vel_size_ *= lin_vel_dims.d[i];
+    }
+    output_lin_vel_size_ *= sizeof(float);
+  } else {
+    output_lin_vel_size_ = 0;
+  }
+
+  // height 输出尺寸（可选）
+  if (!output_height_name_.empty()) {
+    auto height_dims = context_->getTensorShape(output_height_name_.c_str());
+    output_height_size_ = 1;
+    for (int i = 0; i < height_dims.nbDims; ++i) {
+      output_height_size_ *= height_dims.d[i];
+  }
+    output_height_size_ *= sizeof(float);
+  } else {
+    output_height_size_ = 0;
+  }
 
   // 分配 CUDA 内存
   if (cudaMalloc(&input_buffer_, input_size_) != cudaSuccess) {
@@ -266,18 +363,43 @@ bool TensorRTInference::allocateBuffers()
     return false;
   }
 
-  if (cudaMalloc(&output_buffer_, output_size_) != cudaSuccess) {
+  if (cudaMalloc(&output_actions_buffer_, output_actions_size_) != cudaSuccess) {
     RCLCPP_ERROR(logger_, "Failed to allocate CUDA memory for output");
     cudaFree(input_buffer_);
     return false;
   }
 
+  if (output_lin_vel_size_ > 0) {
+    if (cudaMalloc(&output_lin_vel_buffer_, output_lin_vel_size_) != cudaSuccess) {
+      RCLCPP_ERROR(logger_, "Failed to allocate CUDA memory for lin_vel output");
+      cudaFree(input_buffer_);
+      cudaFree(output_actions_buffer_);
+      return false;
+    }
+  }
+
+  if (output_height_size_ > 0) {
+    if (cudaMalloc(&output_height_buffer_, output_height_size_) != cudaSuccess) {
+      RCLCPP_ERROR(logger_, "Failed to allocate CUDA memory for height output");
+      cudaFree(input_buffer_);
+      cudaFree(output_actions_buffer_);
+      if (output_lin_vel_buffer_) {
+        cudaFree(output_lin_vel_buffer_);
+      }
+      return false;
+    }
+  }
+
   // 初始化数据缓冲区
   input_data_.resize(input_size_ / sizeof(float));
-  output_data_.resize(output_size_ / sizeof(float));
+  // 对外接口目前只需要 actions，因此仅为 actions 分配主机缓冲
+  output_data_.resize(output_actions_size_ / sizeof(float));
 
-  RCLCPP_INFO(logger_, "CUDA buffers allocated. Input size: %zu, Output size: %zu",
-    input_size_ / sizeof(float), output_size_ / sizeof(float));
+  RCLCPP_INFO(logger_, "CUDA buffers allocated. Input size: %zu, actions: %zu, lin_vel: %zu, height: %zu (floats)",
+    input_size_ / sizeof(float),
+    output_actions_size_ / sizeof(float),
+    output_lin_vel_size_ / sizeof(float),
+    output_height_size_ / sizeof(float));
 
   return true;
 }
@@ -288,9 +410,17 @@ void TensorRTInference::freeBuffers()
     cudaFree(input_buffer_);
     input_buffer_ = nullptr;
   }
-  if (output_buffer_) {
-    cudaFree(output_buffer_);
-    output_buffer_ = nullptr;
+  if (output_actions_buffer_) {
+    cudaFree(output_actions_buffer_);
+    output_actions_buffer_ = nullptr;
+  }
+  if (output_lin_vel_buffer_) {
+    cudaFree(output_lin_vel_buffer_);
+    output_lin_vel_buffer_ = nullptr;
+  }
+  if (output_height_buffer_) {
+    cudaFree(output_height_buffer_);
+    output_height_buffer_ = nullptr;
   }
   if (cuda_stream_) {
     cudaStreamDestroy(cuda_stream_);
@@ -461,9 +591,16 @@ void TensorRTInference::inferenceCallback()
                    cudaMemcpyHostToDevice, cuda_stream_);
 
     // TensorRT 10 API: 使用 setTensorAddress 设置张量地址
-    if (!input_tensor_name_.empty() && !output_tensor_name_.empty()) {
+    if (!input_tensor_name_.empty() && !output_actions_name_.empty()) {
       context_->setTensorAddress(input_tensor_name_.c_str(), input_buffer_);
-      context_->setTensorAddress(output_tensor_name_.c_str(), output_buffer_);
+      context_->setTensorAddress(output_actions_name_.c_str(), output_actions_buffer_);
+      // 其余输出张量（如 lin_vel / height）也需要绑定地址，否则 TensorRT 会报错
+      if (!output_lin_vel_name_.empty() && output_lin_vel_buffer_) {
+        context_->setTensorAddress(output_lin_vel_name_.c_str(), output_lin_vel_buffer_);
+      }
+      if (!output_height_name_.empty() && output_height_buffer_) {
+        context_->setTensorAddress(output_height_name_.c_str(), output_height_buffer_);
+      }
     } else {
       RCLCPP_ERROR(logger_, "Tensor names not set");
       new_input_available_ = false;
@@ -482,8 +619,8 @@ void TensorRTInference::inferenceCallback()
     // 同步 CUDA 流
     cudaStreamSynchronize(cuda_stream_);
 
-    // 复制输出数据回主机
-    cudaMemcpyAsync(output_data_.data(), output_buffer_, output_size_,
+    // 复制 actions 输出数据回主机
+    cudaMemcpyAsync(output_data_.data(), output_actions_buffer_, output_actions_size_,
                    cudaMemcpyDeviceToHost, cuda_stream_);
     cudaStreamSynchronize(cuda_stream_);
 
@@ -527,9 +664,15 @@ void TensorRTInference::inferenceThread()
                      cudaMemcpyHostToDevice, cuda_stream_);
 
       // TensorRT 10 API: 使用 setTensorAddress 设置张量地址
-      if (!input_tensor_name_.empty() && !output_tensor_name_.empty()) {
+      if (!input_tensor_name_.empty() && !output_actions_name_.empty()) {
         context_->setTensorAddress(input_tensor_name_.c_str(), input_buffer_);
-        context_->setTensorAddress(output_tensor_name_.c_str(), output_buffer_);
+        context_->setTensorAddress(output_actions_name_.c_str(), output_actions_buffer_);
+        if (!output_lin_vel_name_.empty() && output_lin_vel_buffer_) {
+          context_->setTensorAddress(output_lin_vel_name_.c_str(), output_lin_vel_buffer_);
+        }
+        if (!output_height_name_.empty() && output_height_buffer_) {
+          context_->setTensorAddress(output_height_name_.c_str(), output_height_buffer_);
+        }
       } else {
         RCLCPP_ERROR(logger_, "Tensor names not set");
         new_input_available_ = false;
@@ -548,8 +691,8 @@ void TensorRTInference::inferenceThread()
       // 同步 CUDA 流
       cudaStreamSynchronize(cuda_stream_);
 
-      // 复制输出数据回主机
-      cudaMemcpyAsync(output_data_.data(), output_buffer_, output_size_,
+      // 复制 actions 输出数据回主机
+      cudaMemcpyAsync(output_data_.data(), output_actions_buffer_, output_actions_size_,
                      cudaMemcpyDeviceToHost, cuda_stream_);
       cudaStreamSynchronize(cuda_stream_);
 
@@ -584,13 +727,19 @@ TensorRTInference::TensorRTInference(rclcpp::Logger logger)
   , engine_(nullptr)
   , context_(nullptr)
   , input_buffer_(nullptr)
-  , output_buffer_(nullptr)
+  , output_actions_buffer_(nullptr)
+  , output_lin_vel_buffer_(nullptr)
+  , output_height_buffer_(nullptr)
   , input_size_(0)
-  , output_size_(0)
+  , output_actions_size_(0)
+  , output_lin_vel_size_(0)
+  , output_height_size_(0)
   , input_binding_index_(-1)
   , output_binding_index_(-1)
   , input_tensor_name_()
-  , output_tensor_name_()
+  , output_actions_name_()
+  , output_lin_vel_name_()
+  , output_height_name_()
   , running_(false)
   , initialized_(false)
   , input_ready_(false)

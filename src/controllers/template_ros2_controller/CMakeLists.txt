@@ -14,8 +14,8 @@ ament_auto_find_build_dependencies()
 # Explicitly exclude /usr/local/lib from library search path and exclude libfmt.a
 # Use -Wl,--exclude-libs=ALL to exclude all static libraries from dependencies
 # Also use -Wl,--exclude-libs=libfmt.a to explicitly exclude libfmt.a
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu" CACHE STRING "" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu -Wl,--exclude-libs=/usr/local/lib/libfmt.a" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--exclude-libs=ALL -Wl,--exclude-libs=libfmt.a -Wl,--as-needed -L/usr/lib/x86_64-linux-gnu -Wl,-rpath-link=/usr/lib/x86_64-linux-gnu -Wl,--exclude-libs=/usr/local/lib/libfmt.a" CACHE STRING "" FORCE)
 # Remove /usr/local/lib from library search paths
 set(CMAKE_LIBRARY_PATH "${CMAKE_LIBRARY_PATH}" CACHE STRING "" FORCE)
 list(REMOVE_ITEM CMAKE_LIBRARY_PATH "/usr/local/lib")
@@ -49,6 +49,10 @@ set(TENSORRT_CUDA_FILES
   src/tensorrt_cuda/tensorrt_inference.cpp
 )
 
+set(ONNXRUNTIME_CUDA_FILES
+  src/onnxruntime_cuda/onnxruntime_inference.cpp
+)
+
 set(ROBOT_STATE_FILES
   src/robot_state/robot_state.cpp
 )
@@ -60,6 +64,7 @@ set(CONTROLLER_MODULES_FILES
 ament_auto_add_library(${PROJECT_NAME} SHARED
   ${FSM_FILES}
   ${TENSORRT_CUDA_FILES}
+  ${ONNXRUNTIME_CUDA_FILES}
   ${ROBOT_STATE_FILES}
   ${CONTROLLER_MODULES_FILES}
   src/template_ros2_controller.cpp
@@ -86,6 +91,7 @@ target_link_options(template_ros2_controller PRIVATE
   -Wl,--rpath-link=/usr/lib/x86_64-linux-gnu
   -Wl,--exclude-libs=libfmt.a
   -Wl,--exclude-libs=ALL
+  -Wl,--exclude-libs=/usr/local/lib/libfmt.a
 )
 # Find TensorRT and CUDA
 find_path(TENSORRT_INCLUDE_DIR NvInfer.h
@@ -188,19 +194,58 @@ if(TENSORRT_INCLUDE_DIR AND TENSORRT_LIBRARY)
     message(STATUS "CUDA include directory: ${CUDA_INCLUDE_DIR}")
   endif()
 else()
-  message(WARNING "TensorRT not found. RL inference will not be available.")
+  message(WARNING "TensorRT not found. TensorRT RL inference will not be available.")
+endif()
+
+# Find ONNX Runtime
+find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+  PATHS
+    /usr/include/onnxruntime
+    /usr/local/include/onnxruntime
+    ${ONNXRUNTIME_ROOT}/include
+    $ENV{ONNXRUNTIME_ROOT}/include
+)
+
+find_library(ONNXRUNTIME_LIBRARY 
+  NAMES onnxruntime
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /usr/lib/x86_64-linux-gnu
+    ${ONNXRUNTIME_ROOT}/lib
+    $ENV{ONNXRUNTIME_ROOT}/lib
+)
+
+# Link ONNX Runtime libraries if found
+if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
+  target_include_directories(template_ros2_controller PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+  list(APPEND TEMPLATE_ROS2_CONTROLLER_LIBS ${ONNXRUNTIME_LIBRARY})
+  target_compile_definitions(template_ros2_controller PRIVATE ONNXRUNTIME_AVAILABLE)
+  message(STATUS "ONNX Runtime found: ${ONNXRUNTIME_LIBRARY}")
+else()
+  message(WARNING "ONNX Runtime not found. ONNX Runtime RL inference will not be available.")
 endif()
 
 # Link all libraries at once using plain signature to match ament_auto_add_library
 # Explicitly link to system libfmt.so.8 FIRST to override any fmt dependency from other libraries
 # Use -Wl,--exclude-libs=ALL to prevent linking static libraries from dependencies
 # Use target_link_options to ensure /usr/local/lib/libfmt.a is excluded
+# 排除所有静态库，只使用共享库
 target_link_options(template_ros2_controller PRIVATE
-  -Wl,--exclude-libs=libfmt.a
   -Wl,--exclude-libs=ALL
+  # 优先使用系统库路径，避免链接 /usr/local/lib 中的静态库
+  -L/usr/lib/x86_64-linux-gnu
+  -Wl,-rpath,/usr/lib/x86_64-linux-gnu
+  # 明确排除静态库
+  -Wl,--exclude-libs=libfmt.a
 )
+# 明确链接系统共享库，避免链接静态库
 target_link_libraries(template_ros2_controller 
   ${TEMPLATE_ROS2_CONTROLLER_LIBS}
+)
+# 在链接后再次确保排除静态库
+target_link_options(template_ros2_controller PRIVATE
+  -Wl,--exclude-libs=ALL
 )
 
 # Note: patchelf step removed as we now use the system fmt library directly
