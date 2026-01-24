@@ -247,11 +247,11 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     if (trt) {
       const size_t engine_input_dim = trt->getInputElementCount();
       const size_t base_dim = model_input.size();
-      if (engine_input_dim == base_dim + 6) {
-        // 34 = 旧的 28 维 + phase_onehot(5) + jump_height(1)
-        model_input_extra_dim_ = 6;
+      if (engine_input_dim == base_dim + 2) {
+        // 30 = 28 维 + jump_height(1) + jump_phase_sin(1)
+        model_input_extra_dim_ = 2;
         RCLCPP_INFO(logger_,
-                    "Detected jump-enabled policy: engine_input_dim=%zu, base_dim=%zu, extra_dim=%d",
+                    "Detected jump-enabled policy: engine_input_dim=%zu, base_dim=%zu, extra_dim=%d (30-dim)",
                     engine_input_dim, base_dim, model_input_extra_dim_);
       } else if (engine_input_dim == base_dim) {
         model_input_extra_dim_ = 0;
@@ -271,13 +271,13 @@ void StateRL::run(RobotState &robot_state, const rclcpp::Time &time,
     model_input_dim_initialized_ = true;
   }
 
-  // 如果模型支持跳跃特征，则追加 phase_onehot(5) 与 jump_height(1)
-  if (model_input_extra_dim_ >= 6) {
-    for (const auto &p : robot_state.command.jump_phase_onehot) {
-      model_input.push_back(static_cast<float>(p));
-    }
+
+  // 如果模型支持跳跃特征，则追加 jump_height(1) 与 jump_phase_sin(1)
+  if (model_input_extra_dim_ >= 2) {
     model_input.push_back(static_cast<float>(robot_state.command.jump_height));
+    model_input.push_back(static_cast<float>(robot_state.command.jump_phase_sin));
   }
+
 
   // 只有在需要执行推理时才准备输入数据
   if (should_run_inference) {

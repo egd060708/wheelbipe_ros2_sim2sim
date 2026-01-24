@@ -28,7 +28,7 @@
     ang_vel_z_rate: 2.0 # z方向角速度变化速率 (rad/s per second)
 
     # 命名空间前缀（用于匹配控制器的命名空间，例如 "wheelbipe25_v3" 或 "wheelbipe25_v3_serial"）
-    prefix: "wheelbipe25_v3_serial" # 命名空间前缀，留空表示不使用命名空间
+    prefix: "wheelbipe25_v3" # 命名空间前缀，留空表示不使用命名空间
 
     # 话题名称
     motion_command_topic: "motion_command" # 运动指令话题 (geometry_msgs/Twist)

@@ -48,11 +48,8 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_init()
   params_ = param_listener_->get_params();
 
   // 读取跳跃相关参数（使用常规 ROS 参数，便于通过 YAML 配置）
-  // 是否启用跳跃扩展策略（仅影响部署侧是否生成 phase_onehot 与 jump_height）
+  // 是否启用跳跃扩展策略（仅影响部署侧是否生成 jump_phase_sin 与 jump_height）
   jump_enabled_ = get_node()->declare_parameter<bool>("jump_enabled", false);
-  jump_num_phases_ = get_node()->declare_parameter<int>("jump_num_phases", 5);
-  jump_normal_phase_index_ = get_node()->declare_parameter<int>("jump_normal_phase_index", 0);
-  jump_jump_phase_index_ = get_node()->declare_parameter<int>("jump_jump_phase_index", 1);
   jump_duration_ = get_node()->declare_parameter<double>("jump_duration", 0.3);
   jump_height_value_ = get_node()->declare_parameter<double>("jump_height_value", 0.4);
   std::string jump_topic =
@@ -143,9 +140,9 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_configure(
   latest_height_ = 0.2;  // 默认高度
   last_jump_trigger_time_ = 0.0;
 
-  // 初始化指令中的跳跃 one-hot（默认 NORMAL 阶段）
-  robot_state_.command.jump_phase_onehot = {1.0, 0.0, 0.0, 0.0, 0.0};
+  // 初始化跳跃相关状态（默认非跳跃状态）
   robot_state_.command.jump_height = 0.0;
+  robot_state_.command.jump_phase_sin = 0.0;
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -318,41 +315,88 @@ void TemplateRos2Controller::updateRobotState(const rclcpp::Time& time, const rc
     robot_state_.command.cmd_vel[0] = latest_lin_vel_x_;
     robot_state_.command.cmd_vel[1] = latest_lin_vel_y_;
     robot_state_.command.cmd_vel[2] = latest_ang_vel_z_;
-    robot_state_.command.cmd_height = latest_height_;
 
-    // 计算跳跃 phase_onehot 与 jump_height（与训练时的 phase_onehot / jump_height 对齐）
+    // 计算跳跃与高度指令（轨迹跟随逻辑）
     if (jump_enabled_) {
-      const double now = time.seconds();
-      const double dt = now - last_jump_trigger_time_;
-      const bool jump_active = (dt >= 0.0) && (dt <= jump_duration_);
+      // 检查是否需要启动新的跳跃
+      if (jump_requested_ && jump_active_time_ <= 0.0) {
+        jump_active_time_ = 0.0001; // 开始计时
+        jump_initial_height_ = latest_height_;
+        jump_requested_ = false;
+        RCLCPP_INFO(get_node()->get_logger(),
+          "[JUMP] Jump started! initial_height=%.3f, target_height=%.3f, duration=%.3f",
+          jump_initial_height_, jump_height_value_, jump_duration_);
+      }
 
-      // 安全限制索引
-      const int num_phases = static_cast<int>(robot_state_.command.jump_phase_onehot.size());
-      const int normal_idx = std::clamp(jump_normal_phase_index_, 0, num_phases - 1);
-      const int jump_idx = std::clamp(jump_jump_phase_index_, 0, num_phases - 1);
+      const bool jump_active = (jump_active_time_ > 0.0);
 
-      // 清零并设置 one-hot
-      robot_state_.command.jump_phase_onehot.fill(0.0);
       if (jump_active) {
-        robot_state_.command.jump_phase_onehot[jump_idx] = 1.0;
+        // 计算归一化进度 [0, 1]
+        double progress = jump_active_time_ / jump_duration_;
+        if (progress > 1.0) progress = 1.0;
+        
+        // 计算平滑的正弦信号
+        robot_state_.command.jump_phase_sin = std::sin(M_PI * progress);
         robot_state_.command.jump_height = jump_height_value_;
+        
+        // 更新 cmd_height
+        double curve_value = computeJumpCurve(progress);
+        double height_range = jump_height_value_ - jump_initial_height_;
+        robot_state_.command.cmd_height = jump_initial_height_ + height_range * curve_value;
+        
+        // 累加已用时间
+        jump_active_time_ += period.seconds();
+
+        // 结束检测
+        if (progress >= 1.0) {
+          jump_active_time_ = 0.0;
+          jump_requested_ = false;
+          robot_state_.command.jump_phase_sin = 0.0;
+          robot_state_.command.jump_height = 0.0;
+          robot_state_.command.cmd_height = latest_height_;
+          RCLCPP_INFO(get_node()->get_logger(), "[JUMP] Jump ended.");
+        }
+
+        // 调试打印
+        static int jump_debug_counter = 0;
+        if (++jump_debug_counter % 20 == 0) {
+          RCLCPP_INFO(get_node()->get_logger(),
+            "[JUMP] T=%.3f, P=%.3f, Sin=%.3f, H=%.3f",
+            jump_active_time_, progress, robot_state_.command.jump_phase_sin, 
+            robot_state_.command.cmd_height);
+        }
       } else {
-        robot_state_.command.jump_phase_onehot[normal_idx] = 1.0;
+        // 非跳跃状态
+        robot_state_.command.jump_phase_sin = 0.0;
         robot_state_.command.jump_height = 0.0;
+        robot_state_.command.cmd_height = latest_height_;
       }
     } else {
-      // 未启用跳跃时，保持 NORMAL 阶段且高度为 0
-      robot_state_.command.jump_phase_onehot = {1.0, 0.0, 0.0, 0.0, 0.0};
+      // 跳跃禁用状态
+      robot_state_.command.jump_phase_sin = 0.0;
       robot_state_.command.jump_height = 0.0;
+      robot_state_.command.cmd_height = latest_height_;
+      jump_requested_ = false;
+      jump_active_time_ = 0.0;
     }
 
-    // 定期打印命令值（每100次更新打印一次，约0.2秒一次）
+    // 定期输出控制指令状态 (调试级)
     static int debug_counter = 0;
-    if (++debug_counter % 100 == 0) {
+    if (++debug_counter % 200 == 0) {
       RCLCPP_DEBUG(get_node()->get_logger(),
-        "Current command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f, height=%.3f, jump_h=%.3f, received=%d",
-        latest_lin_vel_x_, latest_lin_vel_y_, latest_ang_vel_z_,
-        latest_height_, robot_state_.command.jump_height, motion_cmd_received_);
+        "CMD: lin_x=%.2f, ang_z=%.2f, h=%.3f, jump_sin=%.3f",
+        latest_lin_vel_x_, latest_ang_vel_z_,
+        robot_state_.command.cmd_height, robot_state_.command.jump_phase_sin);
+    }
+
+    // 发布跳跃和高度状态用于可视化
+    if (jump_state_publisher_) {
+      auto msg = std_msgs::msg::Float64MultiArray();
+      msg.data.push_back(robot_state_.command.jump_phase_sin); // [0]
+      msg.data.push_back(robot_state_.command.jump_height);    // [1]
+      msg.data.push_back(robot_state_.command.cmd_height);     // [2]
+      msg.data.push_back(latest_height_);                    // [3]
+      jump_state_publisher_->publish(msg);
     }
   }
 
@@ -368,7 +412,8 @@ void TemplateRos2Controller::motionCommandCallback(
   latest_lin_vel_y_ = msg->linear.y;
   latest_ang_vel_z_ = msg->angular.z;
   motion_cmd_received_ = true;
-  RCLCPP_INFO(get_node()->get_logger(), 
+  // 改为DEBUG级别，避免终端刷屏
+  RCLCPP_DEBUG(get_node()->get_logger(), 
     "Received motion command: lin_vel_x=%.3f, lin_vel_y=%.3f, ang_vel_z=%.3f",
     msg->linear.x, msg->linear.y, msg->angular.z);
 }
@@ -378,29 +423,30 @@ void TemplateRos2Controller::heightCommandCallback(
 {
   std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
   latest_height_ = msg->data;
-  RCLCPP_INFO(get_node()->get_logger(), "Received height command: %.3f", msg->data);
+  // 改为DEBUG级别，避免终端刷屏
+  RCLCPP_DEBUG(get_node()->get_logger(), "Received height command: %.3f", msg->data);
 }
 
 void TemplateRos2Controller::jumpCommandCallback(
   const std_msgs::msg::Float64::SharedPtr msg)
 {
   if (!jump_enabled_) {
+    RCLCPP_WARN(get_node()->get_logger(), "[JUMP] Jump disabled, ignoring command");
     return;
   }
   // 约定：msg->data > 0 触发一次跳跃
   if (msg->data > 0.0) {
     std::lock_guard<std::mutex> lock(motion_cmd_mutex_);
-    // 使用当前 ROS 时间作为触发时间
-    last_jump_trigger_time_ = get_node()->get_clock()->now().seconds();
-    RCLCPP_INFO(get_node()->get_logger(), "Jump command triggered, timestamp=%.3f",
-      last_jump_trigger_time_);
+    jump_requested_ = true;  // 设置标志位，等待 update 循环同步处理
+    RCLCPP_INFO(get_node()->get_logger(),
+      "[JUMP] Jump request received! command=%.2f", msg->data);
   }
 }
 
 // 从失能状态到激活状态
 controller_interface::CallbackReturn TemplateRos2Controller::on_activate(const rclcpp_lifecycle::State &)
 {
-  // 创建运动指令话题订阅者
+  // 创建运动指令话题订阅者on_activate
   std::string motion_topic = "motion_command";
   std::string height_topic = "height_command";
   std::string jump_topic = get_node()->get_parameter("jump_command_topic").as_string();
@@ -415,6 +461,9 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_activate(const r
   jump_cmd_subscriber_ = get_node()->create_subscription<std_msgs::msg::Float64>(
     jump_topic, 10,
     std::bind(&TemplateRos2Controller::jumpCommandCallback, this, std::placeholders::_1));
+  
+  // 初始化跳跃状态发布器
+  jump_state_publisher_ = get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("jump_state", 10);
   
   // 获取节点的完整话题名称（包括命名空间）
   std::string node_namespace = get_node()->get_namespace();
@@ -553,6 +602,17 @@ controller_interface::CallbackReturn TemplateRos2Controller::on_shutdown(const r
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
+// 计算跳跃曲线值，范围 [0, 1]
+// 使用标准正弦曲线：sin(π * progress)
+// 参数 progress: 归一化进度 [0, 1]
+// 返回值: 曲线值 [0, 1]，表示从initial_height到jump_height的进度
+double TemplateRos2Controller::computeJumpCurve(double progress) const
+{
+  // 使用平滑的正弦曲线（与 wheelbipe_rl 默认的 "smooth" 模式一致）
+  // curve = sin(π * progress)
+  // 在 progress = 0.5 时达到峰值 1
+  return std::sin(M_PI * progress);
+}
 
 TemplateRos2Controller::~TemplateRos2Controller()
 {
